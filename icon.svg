@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="OI knowledge tree">
+  <defs>
+    <linearGradient id="bg" x1="6" y1="4" x2="58" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#25345c"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="32" y1="14" x2="32" y2="52" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8fe6ff"/>
+      <stop offset="1" stop-color="#5b8cff"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#bg)"/>
+  <g fill="none" stroke="url(#edge)" stroke-width="2.2" stroke-linecap="round">
+    <path d="M32 17v9"/>
+    <path d="M32 26H18v11"/>
+    <path d="M32 26h14v11"/>
+    <path d="M18 41v6"/>
+    <path d="M46 41v6"/>
+  </g>
+  <g fill="#e9f5ff">
+    <circle cx="32" cy="15" r="4.6"/>
+    <circle cx="18" cy="39" r="3.8"/>
+    <circle cx="46" cy="39" r="3.8"/>
+    <circle cx="18" cy="50" r="2.8"/>
+    <circle cx="46" cy="50" r="2.8"/>
+  </g>
+  <circle cx="32" cy="15" r="1.9" fill="#ffd36b"/>
+</svg>

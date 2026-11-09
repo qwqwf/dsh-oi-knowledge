@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "title": "OI 知识点树",
+    "description": "把做过的题拆成观察、套路、思路与坑点，维护可自检弱点的知识点树，并同步 Codeforces / AtCoder / 洛谷 账号。"
+  },
+  "panel": {
+    "title": "OI 知识点树",
+    "tree": "知识树",
+    "problems": "题目",
+    "weakness": "弱点",
+    "accounts": "账号"
+  }
+}

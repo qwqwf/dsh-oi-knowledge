@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "title": "OI Knowledge Tree",
+    "description": "Break problems and editorials into observations, tricks, ideas and pitfalls; maintain a knowledge tree that finds your training weaknesses and syncs Codeforces / AtCoder / Luogu accounts."
+  },
+  "panel": {
+    "title": "OI Knowledge Tree",
+    "tree": "Tree",
+    "problems": "Problems",
+    "weakness": "Weakness",
+    "accounts": "Accounts"
+  }
+}

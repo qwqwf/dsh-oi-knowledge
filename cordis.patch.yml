@@ -1,0 +1,12 @@
+# dsh-oi-knowledge —— bundle 自己的补丁层。
+#
+# 只负责把本插件的 host 侧插进当前 profile，不碰 profile 的 package.json，
+# 也不碰模型路由。安装走官方 plugin_manager 的 install_bundle。
+#
+# 可调项：
+#   dataDir  知识库目录；留空 = %USERPROFILE%\.dsh\oi-knowledge
+#            （kb.json 是唯一的数据库文件，另外缓存一份 cf-problemset.json）
+- insert:
+    - id: oi-knowledge
+      name: 'dsh-oi-knowledge'
+      config: {}
