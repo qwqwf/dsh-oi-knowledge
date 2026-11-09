@@ -247,18 +247,24 @@ lib/sync.js       三个平台的同步
 lib/service.js    业务逻辑（工具与面板共用）
 ```
 
-### 低 token 消化
+### 批量补题（质量优先）
 
-要补题（抓题面+题解 → 提炼精髓）时，先用 `--brief` 把单题压到题面 3.5k、题解 9k 字符以内，再交给子代理或便宜模型：
+要补题（抓题面+题解 → 提炼精髓）时，默认**全文读**：题面 + 题解在 1.3 万字符以内不压缩。
+
+```powershell
+& $node dev\atcoder-digest-fetch.mjs --min 2000 --max 2800 --limit 10
+```
+
+只有整场 PDF、几十道题的合集这类明显超长的来源才加 `--brief`（题面 3.5k、题解 9k 封顶），截掉与本题无关的正文：
 
 ```powershell
 & $node dev\atcoder-digest-fetch.mjs --min 2000 --max 2800 --limit 10 --brief
 ```
 
-- 不加 `--brief` 会保留整篇题解（最长的整场 PDF 有 5 万字符，约 3.7 万 token）。
-- 401 篇历史 inbox 里，有 61 篇超过 1.3 万字符；`--brief` 把这些截到上限，整体省约 23% 字符，长题解省得更多。
-- 截断处会留「…（已截断，原文 N 字）」标记：如果关键推导正好落在截断外，对那一题单独 `--tasks <key> --refetch`（不加 `--brief`）重读全文，只追加在真正需要的题上。
-- 配套的 agent skill 在插件仓库外：`C:\Users\lenovo\.dsh\skills\oi-digest\SKILL.md`（描述批量流程与预算），DSH 会自动把它加进可用技能列表。
+- 不加 `--brief` 会保留整篇题解（最长的整场 PDF 有 5 万字符）。
+- 截断处会留「…（已截断，原文 N 字）」标记：如果关键推导正好落在截断外，对那一题单独 `--tasks <key> --refetch`（不加 `--brief`）重读全文，不在预算上妥协。
+- 洞察每条都要写具体做法/公式/复杂度；推不出就跳过，不编。
+- 配套的 agent skill 在插件仓库外：`C:\Users\lenovo\.dsh\skills\oi-digest\SKILL.md`，DSH 会自动把它加进可用技能列表。
 
 ## 定期体检
 
