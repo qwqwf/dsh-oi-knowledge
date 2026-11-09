@@ -33,6 +33,22 @@ function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true })
 }
 
+/**
+ * 压掉空白与重复行，并按字符上限截断。
+ * 只用于 --brief：省 token 时把长题解压成可读的短摘要，宁可少给、不整篇灌。
+ */
+export function condense(text, limit) {
+  const cleaned = String(text || '')
+    .replace(/\r/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+  if (cleaned.length <= limit) return cleaned
+  const cut = cleaned.slice(0, limit)
+  const lastLine = cut.lastIndexOf('\n')
+  return `${(lastLine > limit * 0.6 ? cut.slice(0, lastLine) : cut).trimEnd()}\n\n…（已截断，原文 ${cleaned.length} 字）`
+}
+
 async function getText(url, timeoutMs = 30000) {
   let lastError = null
   for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -242,7 +258,10 @@ async function fetchPdfEditorial(url, letter) {
 async function fetchTaskText(task) {
   const page = await getText(`${task.url}?lang=en`)
   const start = page.indexOf('id="task-statement"')
-  return htmlToText(start === -1 ? page : page.slice(start))
+  if (start === -1) return htmlToText(page)
+  // 从开标签的 > 之后开始，否则会把 id="task-statement"> 这类属性文本当成正文
+  const tagEnd = page.indexOf('>', start)
+  return htmlToText(page.slice(tagEnd === -1 ? start : tagEnd + 1))
 }
 
 async function fetchEditorialText(task) {
@@ -252,7 +271,8 @@ async function fetchEditorialText(task) {
     try {
       const page = await getText(`https://atcoder.jp${link.href}?lang=en`)
       const start = page.indexOf('id="main-container"')
-      const text = htmlToText(start === -1 ? page : page.slice(start))
+      const tagEnd = start === -1 ? -1 : page.indexOf('>', start)
+      const text = htmlToText(start === -1 ? page : page.slice(tagEnd === -1 ? start : tagEnd + 1))
       if (text.length > 300) return { text, url: `https://atcoder.jp${link.href}` }
     } catch (_) {
       /* 官方页面抓不动，继续兜底 */
@@ -321,6 +341,9 @@ async function main() {
 
   ensureDir(INBOX_DIR)
   const manifest = []
+  const brief = Boolean(arg('brief', false))
+  const statementCap = Number(arg('statement-cap', brief ? 3200 : 0)) || (brief ? 3200 : 0)
+  const editorialCap = Number(arg('editorial-cap', brief ? 7000 : 0)) || (brief ? 7000 : 0)
   for (const task of picked) {
     const file = path.join(INBOX_DIR, `${task.key}.txt`)
     if (fs.existsSync(file) && !arg('refetch')) {
@@ -330,13 +353,15 @@ async function main() {
     }
     process.stdout.write(`抓取 ${task.key}（${task.rating ?? '?'}）... `)
     try {
-      const statement = await fetchTaskText(task)
+      let statement = await fetchTaskText(task)
       let editorial = { text: '', url: null }
       try {
         editorial = await fetchEditorialText(task)
       } catch (error) {
         editorial = { text: `（题解抓取失败：${error.message}）`, url: null }
       }
+      if (brief && statementCap) statement = condense(statement, statementCap)
+      if (brief && editorialCap) editorial = { ...editorial, text: condense(editorial.text, editorialCap) }
       const body = [
         `# ${task.key} ${task.title}`,
         `rating: ${task.rating ?? 'unknown'}`,
