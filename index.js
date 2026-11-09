@@ -177,6 +177,7 @@ function registerTools(ctx, service) {
         '  add_insight — 给已有题补一条洞察（problem + kind + text + nodes?）；kind 可用英文或中文（观察/套路/思路/思考方向/坑点），nodes 可挂算法节点或思路节点；',
         '  remove_insight — 删一条洞察（problem + insight=id 或文本片段）；',
         '  update — 改题目字段（problem + title/url/rating/tags/verdict/essence/statement/solution/nodes）；',
+        '  stuck — 记录这题卡在哪一步（problem + stage：observe/derive/implement/debug，留空清除）；',
         '  show — 看题目全文、精髓与所有洞察；',
         '  list — 列表，可按 platform/verdict/node/query 过滤；',
         '  search — 按标题/题号/tag/题解/洞察全文搜；',
@@ -193,7 +194,7 @@ function registerTools(ctx, service) {
         properties: {
           action: {
             type: 'string',
-            enum: ['add', 'add_insight', 'remove_insight', 'update', 'show', 'list', 'search', 'link_node', 'unlink_node', 'classify', 'remove'],
+            enum: ['add', 'add_insight', 'remove_insight', 'update', 'stuck', 'show', 'list', 'search', 'link_node', 'unlink_node', 'classify', 'remove'],
           },
           problem: { type: 'string', description: '题目：id、platform:key（如 codeforces:1879D）或题目链接' },
           platform: { type: 'string', enum: ['codeforces', 'atcoder', 'luogu', 'other'], description: '平台' },
@@ -232,6 +233,7 @@ function registerTools(ctx, service) {
           node: { type: 'string', description: 'link_node / unlink_node 的目标知识点' },
           query: { type: 'string', description: 'list / search 的关键词' },
           verdict_filter: { type: 'string', enum: ['solved', 'attempted', 'unsolved', 'unknown'], description: 'list 的状态过滤' },
+          stage: { type: 'string', enum: ['observe', 'derive', 'implement', 'debug', ''], description: 'stuck：卡点阶段，留空表示清除' },
           apply: { type: 'boolean', description: 'classify 是否写回，默认 true' },
           limit: { type: 'number', description: 'list 返回条数' },
         },
@@ -274,6 +276,8 @@ function registerTools(ctx, service) {
                   },
                 }),
               )
+            case 'stuck':
+              return toolOk(service.markStuck({ problem: args.problem, stage: args.stage }))
             case 'show':
               return toolOk(service.showProblem({ problem: args.problem }))
             case 'list':

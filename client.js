@@ -45,6 +45,13 @@ window.__ModuleLoader__.load({
       ['attempted', '尝试过'],
       ['unsolved', '没过'],
     ]
+    const STUCK_STAGES = [
+      ['observe', '没找到观察', '读完了但抓不到关键那一步'],
+      ['derive', '推不动', '有观察，但推不到能写的形式'],
+      ['implement', '写不出来', '知道怎么做，码不出来或写不完'],
+      ['debug', '调不出', '写完了过不了样例/WA'],
+    ]
+    const STUCK_LABEL = Object.fromEntries(STUCK_STAGES.map(([value, label]) => [value, label]))
     const PLATFORMS = [
       ['codeforces', 'Codeforces'],
       ['atcoder', 'AtCoder'],
@@ -2063,6 +2070,7 @@ window.__ModuleLoader__.load({
                     { style: { fontSize: 11, color: C.muted, display: 'flex', gap: 6, flexWrap: 'wrap' } },
                     h('span', null, `${problem.platform} ${problem.key}`),
                     h('span', null, `· 洞察 ${problem.insights.length}`),
+                    problem.stuckStage ? h('span', { style: { color: C.warn } }, `· 卡在${STUCK_LABEL[problem.stuckStage] || problem.stuckStage}`) : null,
                     problem.nodePaths.slice(0, 2).map((path) => h('span', { key: path }, `· ${path}`)),
                   ),
                 ),
@@ -2305,6 +2313,42 @@ window.__ModuleLoader__.load({
               },
             }, '删除'),
           ),
+          h(
+            'div',
+            { style: { display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' } },
+            h('span', { style: { fontSize: 11.5, color: C.textDim } }, '卡在哪一步'),
+            STUCK_STAGES.map(([value, label, hint]) =>
+              h(
+                Btn,
+                {
+                  key: value,
+                  tone: entity.stuckStage === value ? 'primary' : undefined,
+                  title: hint,
+                  disabled: busy,
+                  onClick: async () => {
+                    const next = entity.stuckStage === value ? '' : value
+                    const result = await call('markStuck', { problem: problem.id, stage: next })
+                    if (result) setTick((tickValue) => tickValue + 1)
+                  },
+                },
+                label,
+              ),
+            ),
+            entity.stuckStage
+              ? h(
+                  Btn,
+                  {
+                    disabled: busy,
+                    onClick: async () => {
+                      const result = await call('markStuck', { problem: problem.id, stage: '' })
+                      if (result) setTick((tickValue) => tickValue + 1)
+                    },
+                  },
+                  '清除',
+                )
+              : null,
+          ),
+
           (entity.tags || []).length
             ? h(
                 'div',
@@ -2465,6 +2509,10 @@ window.__ModuleLoader__.load({
         }
       }
 
+      const stuck = overview.stuck || {}
+      const stuckTotal = STUCK_STAGES.reduce((sum, [value]) => sum + (stuck[value] || 0), 0)
+      const stuckTop = STUCK_STAGES.map(([value, label]) => [label, stuck[value] || 0]).sort((a, b) => b[1] - a[1])[0]
+
       const cards = [
         ['覆盖', `${overview.coveredPct}%`, `已触达 ${overview.covered}/${Math.max(0, overview.nodes - 1)} 个节点`],
         ['非常熟练', overview.expert, '◆ 稳定到能当工具用'],
@@ -2478,6 +2526,7 @@ window.__ModuleLoader__.load({
         ['思路覆盖', `${overview.ideaNodes ? Math.round((overview.ideaCovered / Math.max(1, overview.ideaNodes - 1)) * 100) : 0}%`, `已沉淀 ${overview.ideaCovered}/${Math.max(0, overview.ideaNodes - 1)} 个思路`],
         ['思路洞察', overview.ideaInsights, '挂在思路节点上的洞察'],
         ['观察树', `${overview.keyObservations || 0} 条`, `未归类 ${overview.obsUnassigned || 0} 条 / ${overview.obsNodes || 0} 节点`],
+        ['卡点', stuckTotal || '—', stuckTotal ? `最多：${stuckTop[0]} ${stuckTop[1]}` : '还没记录卡点'],
         ['洞察', overview.insights, `卡住的题 ${overview.manualStuck}`],
       ]
 
@@ -2497,6 +2546,35 @@ window.__ModuleLoader__.load({
             ),
           ),
         ),
+        stuckTotal
+          ? h(
+              Card,
+              null,
+              h(SectionTitle, { first: true }, '卡在哪一步'),
+              h(
+                'div',
+                { style: { fontSize: 11.5, color: C.muted, marginBottom: 6, lineHeight: 1.6 } },
+                '过没过只是结果。这个分布才告诉你下一步该练观察、推导、实现还是调试。',
+              ),
+              STUCK_STAGES.map(([value, label, hint]) => {
+                const count = stuck[value] || 0
+                const ratio = stuckTotal ? count / stuckTotal : 0
+                return h(
+                  'div',
+                  { key: value, style: { padding: '6px 0', borderBottom: `1px solid ${C.border}` } },
+                  h(
+                    'div',
+                    { style: { display: 'flex', gap: 8, alignItems: 'baseline' } },
+                    h('span', { style: { flex: 1, fontSize: 12.5 } }, `${label}`),
+                    h('span', { style: { fontSize: 11, color: C.muted } }, hint),
+                    h('span', { style: { fontSize: 12, width: 40, textAlign: 'right' } }, `${count}`),
+                    h('span', { style: { fontSize: 11, color: C.muted, width: 44, textAlign: 'right' } }, `${Math.round(ratio * 100)}%`),
+                  ),
+                  h(Bar, { value: ratio, color: C.brand, style: { margin: '5px 0 3px' } }),
+                )
+              }),
+            )
+          : null,
         h(
           Card,
           null,
