@@ -342,8 +342,8 @@ async function main() {
   ensureDir(INBOX_DIR)
   const manifest = []
   const brief = Boolean(arg('brief', false))
-  const statementCap = Number(arg('statement-cap', brief ? 3200 : 0)) || (brief ? 3200 : 0)
-  const editorialCap = Number(arg('editorial-cap', brief ? 7000 : 0)) || (brief ? 7000 : 0)
+  const statementCap = Number(arg('statement-cap', brief ? 3500 : 0)) || (brief ? 3500 : 0)
+  const editorialCap = Number(arg('editorial-cap', brief ? 9000 : 0)) || (brief ? 9000 : 0)
   for (const task of picked) {
     const file = path.join(INBOX_DIR, `${task.key}.txt`)
     if (fs.existsSync(file) && !arg('refetch')) {
