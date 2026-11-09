@@ -19,7 +19,7 @@ plugin_manager action=install_bundle target=<本包绝对路径>
 从 GitHub 获取时，先 clone 到本地，再把**仓库根目录**的绝对路径填进 `target`：
 
 ```
-git clone https://github.com/<你的账号>/dsh-oi-knowledge.git
+git clone https://github.com/qwqwf/dsh-oi-knowledge.git
 ```
 
 安装后重启（或重新加载）Web 界面，左侧栏会出现「OI 知识点」图标；也可以直接在对话里让模型调用下面三个工具。
