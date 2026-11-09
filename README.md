@@ -264,7 +264,12 @@ lib/service.js    业务逻辑（工具与面板共用）
 - 不加 `--brief` 会保留整篇题解（最长的整场 PDF 有 5 万字符）。
 - 截断处会留「…（已截断，原文 N 字）」标记：如果关键推导正好落在截断外，对那一题单独 `--tasks <key> --refetch`（不加 `--brief`）重读全文，不在预算上妥协。
 - 洞察每条都要写具体做法/公式/复杂度；推不出就跳过，不编。
-- 配套的 agent skill 在插件仓库外：`C:\Users\lenovo\.dsh\skills\oi-digest\SKILL.md`，DSH 会自动把它加进可用技能列表。
+- 配套的 agent skill 也随仓库分发在 `skills/oi-digest/SKILL.md`；装到用户级技能目录即可被 DSH 自动收录：
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.dsh\skills\oi-digest" | Out-Null
+Copy-Item .\skills\oi-digest\SKILL.md "$env:USERPROFILE\.dsh\skills\oi-digest\SKILL.md"
+```
 
 ## 定期体检
 
