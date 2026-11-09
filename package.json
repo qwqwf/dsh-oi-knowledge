@@ -1,7 +1,7 @@
-﻿{
+{
   "name": "dsh-oi-knowledge",
   "version": "1.1.11",
-  "description": "OI/ICPC 鐭ヨ瘑鐐规爲锛氭妸棰樼洰涓庨瑙ｆ媶鎴愯瀵熴€佸璺€佹€濊矾涓庡潙鐐癸紝缁存姢鍙嚜妫€璁粌寮辩偣鐨勭煡璇嗙偣鏍戯紝骞跺悓姝?Codeforces / AtCoder / 娲涜胺 璐﹀彿銆?,
+  "description": "OI/ICPC 知识点树：把题目与题解拆成观察、套路、思路与坑点，维护可自检训练弱点的知识点树，并同步 Codeforces / AtCoder / 洛谷 账号。",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -22,8 +22,8 @@
     "README.md"
   ],
   "meta": {
-    "title": "OI 鐭ヨ瘑鐐规爲",
-    "description": "鎶婂仛杩囩殑棰樻媶鎴愯瀵熴€佸璺€佹€濊矾涓庡潙鐐癸紝缁存姢鍙嚜妫€寮辩偣鐨勭煡璇嗙偣鏍戯紝骞跺悓姝?Codeforces / AtCoder / 娲涜胺 璐﹀彿銆?
+    "title": "OI 知识点树",
+    "description": "把做过的题拆成观察、套路、思路与坑点，维护可自检弱点的知识点树，并同步 Codeforces / AtCoder / 洛谷 账号。"
   },
   "dsh": {
     "bundle": {
@@ -48,4 +48,3 @@
   ],
   "license": "MIT"
 }
-
