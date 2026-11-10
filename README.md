@@ -305,7 +305,11 @@ $node = "C:\Users\<你>\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\node\
 & $node dev\audit.mjs        # 全库体检：缺挂载的观察、孤立节点、坏引用、state 体积
 & $node dev\route-check.mjs  # HTTP 路由：鉴权、state、gzip、404/400、POST call
 & $node dev\similarity-test.mjs # 相似度模型：同构=1、难度打折、泛节点降权、样本不进基线
+& $node dev\kb-lint.mjs       # 数学渲染体检：脏字符、$ 不配对、KaTeX 解析失败、$ 外残留公式（有问题退出码 2）
+& $node dev\math-fix-all.mjs  # 幂等修复：裸 LaTeX / 下标 / 幂 / O(...) / 区间 / 单变量 补成 $…$（dry-run，--write 写回）
 ```
+
+`kb-lint` 的「裸数学」规则只检查面板会显示的字段（essence / statementZh / titleZh / 洞察 / 节点与观察句式），不检查只存在于编辑框里的英文原文。
 
 目录：
 

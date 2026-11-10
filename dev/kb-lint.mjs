@@ -15,6 +15,62 @@ const FIX = process.argv.includes('--fix')
 const CTRL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/
 const MARK = '\u0003'
 
+// 裸数学残留（$ 外面还有公式碎片）——用户最常看到的那类问题
+const PLAIN_RULES = [
+  ['plain-cmd', '\\[A-Za-z]+'],
+  ['plain-sub', '(?<![$\\\\A-Za-z0-9])[A-Za-z0-9]+\\s*[_^]\\s*[A-Za-z0-9{]'],
+  ['plain-array', '(?<![$\\\\A-Za-z0-9])[A-Za-z]+\\[[^\\[\\]]+\\]'],
+  ['plain-bigO', '(?<![$\\\\A-Za-z0-9])O\\('],
+  ['plain-unicode', '[≤≥≠∞∑√×÷≈→⇒∈⊆⋅±∅]'],
+]
+
+const CJK = /[\u4e00-\u9fff]/
+
+function plainMathSegments(text) {
+  const parts = []
+  let buf = ''
+  let inMath = false
+  let mode = 'text'
+  for (const ch of String(text || '')) {
+    if (ch === '`') {
+      if (buf) parts.push({ math: inMath, code: mode === 'code', text: buf })
+      buf = ''
+      mode = mode === 'code' ? 'text' : 'code'
+      continue
+    }
+    if (ch === '$' && mode === 'text') {
+      if (buf) parts.push({ math: inMath, code: false, text: buf })
+      buf = ''
+      inMath = !inMath
+      continue
+    }
+    buf += ch
+  }
+  if (buf) parts.push({ math: inMath, code: mode === 'code', text: buf })
+  return parts
+}
+
+function checkPlainMath(where, key, text, field) {
+  if (typeof text !== 'string' || !text) return
+  // 英文原文 statement/solution 只在编辑框里出现，不参与渲染检查
+  if (field === 'statement' || field === 'solution') return
+  for (const part of plainMathSegments(text)) {
+    if (part.math || part.code) continue
+    for (const [type, pattern] of PLAIN_RULES) {
+      const re = new RegExp(pattern, 'g')
+      const match = re.exec(part.text)
+      if (!match) continue
+      // 英文复合词（hockey-stick、DFS/BFS、1-based）放行
+      if (type === 'plain-sub' || type === 'plain-unicode') {
+        // 允许的中文语境：仍然报
+      }
+      if (type === 'plain-array' && /^[A-Za-z]{2,}\[[A-Za-z]{2,}\]$/.test(match[0])) continue
+      const around = part.text.slice(Math.max(0, match.index - 12), match.index + match[0].length + 12)
+      issues.push({ where, key, field, type, detail: `${JSON.stringify(match[0].slice(0, 40))} … ${JSON.stringify(around)}` })
+    }
+  }
+}
+
 function segments(text) {
   const out = []
   let i = 0
@@ -58,6 +114,7 @@ function checkText(where, key, text, field) {
     const err = katexError(seg.value)
     if (err) issues.push({ where, key, field, type: 'katex-error', detail: `${JSON.stringify(seg.value.slice(0, 70))} :: ${err}` })
   }
+  checkPlainMath(where, key, text, field)
 }
 
 for (const problem of kb.problems || []) {
@@ -91,6 +148,7 @@ for (const node of kb.obsNodes || []) {
 const byType = {}
 for (const issue of issues) byType[issue.type] = (byType[issue.type] || 0) + 1
 console.log(`总问题 ${issues.length} 条`, byType)
+if (issues.length) process.exitCode = 2
 for (const issue of issues.slice(0, 40)) {
   console.log(`- [${issue.type}] ${issue.where} ${issue.key} ${issue.field} :: ${issue.detail}`)
 }
