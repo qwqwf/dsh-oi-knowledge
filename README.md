@@ -26,7 +26,7 @@ plugin_manager action=remove_bundle target=dsh-oi-knowledge
 
 ## 面板
 
-左侧栏点「OI 知识点」打开主面板。标题栏右侧有三个按钮：**🎯 薄弱题**（随机抽一批候选题，挑出命中你最弱知识点的那道，可「换一道」）、**🌳 完整知识树**（浮层里一次看完整棵知识/思路/观察树，含每个节点的掌握度、题数、洞察数）、**刷新**。下面四个标签页：
+左侧栏点「OI 知识点」打开主面板。标题栏右侧有三个按钮：**🎯 薄弱题**（去 AtCoder 题库随机抽几道没做过的新题，抓题面/题解后挑出最戳弱点的一道，打开时显示「正在为您准备题目」）、**🌳 完整知识树**（浮层里一次看完整棵知识/思路/观察树，含每个节点的掌握度、题数、洞察数）、**刷新**。下面四个标签页：
 
 | 标签 | 作用 |
 | --- | --- |
@@ -60,7 +60,7 @@ oi_kb action=map_tag tag="2-sat" node="图论/连通性/2-SAT"
 oi_kb action=report                        # 掌握度报告
 oi_kb action=gaps                          # 最该补的缺口
 oi_kb action=recommend count=5             # 推荐练习题（需要 CF 缓存或已绑定账号）
-oi_kb action=weak                          # 面板同款：随机抽候选 → 挑命中你最弱知识点的一道
+oi_kb action=weak                          # 面板同款：从 AtCoder 库随机抽题 → 按题面/题解关键词挑最戳弱点的一道
 oi_kb action=obs_tree depth=3              # 观察树：精髓观察的层级结构与计数
 oi_kb action=obs_patterns                  # 观察句式库：所有节点上沉淀的「常见观察」
 oi_kb action=obs_patterns query="二分"      # 按关键词过滤观察句式

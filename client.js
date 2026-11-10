@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.12'
+    const CLIENT_BUILD = '1.3.13'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -1077,33 +1077,48 @@ window.__ModuleLoader__.load({
       const [result, setResult] = React.useState(props.result)
       const [loading, setLoading] = React.useState(false)
       const [seen, setSeen] = React.useState(weakSeenList())
+      const preparing = !result || result.preparing === true
       const item = result ? result.item : null
       const weak = result ? result.weak : null
-      const again = async () => {
+
+      const load = async (exclude) => {
         setLoading(true)
         try {
-          let next = await call('weakProblem', { exclude: seen }, { silent: true })
+          let next = await call('weakProblem', { exclude }, { silent: true })
           if (!next || !next.item) {
             // 一轮都换完了：清空记录，从第一道重新开始。
-            setSeen(forgetWeakSeen())
+            forgetWeakSeen()
             next = await call('weakProblem', {}, { silent: true })
-            if (next && next.item) setSeen(rememberWeakSeen(next.item.key))
-          } else {
-            setSeen(rememberWeakSeen(next.item.key))
           }
+          if (next && next.item) setSeen(rememberWeakSeen(next.item.key))
           if (next) setResult(next)
         } finally {
           setLoading(false)
         }
       }
+
+      React.useEffect(() => {
+        if (preparing) load(weakSeenList())
+      }, [])
+
+      const again = () => load(seen)
+
       return h(
         Overlay,
         {
           title: '薄弱题推荐',
-          subtitle: '随机抽一批题，挑出命中你最弱知识点的那道',
+          subtitle: '从 AtCoder 题库随机抽几道新题，挑一道最戳你弱点的',
           onClose: props.onClose,
-          actions: h(Btn, { onClick: again, disabled: loading, tone: 'primary' }, loading ? '正在挑…' : '换一道'),
+          actions: preparing ? null : h(Btn, { onClick: again, disabled: loading, tone: 'primary' }, loading ? '正在为您准备题目…' : '换一道'),
         },
+        loading || preparing
+          ? h(
+              Card,
+              null,
+              h(SectionTitle, { first: true }, '正在为您准备题目'),
+              h('div', { style: { fontSize: 12.5, color: C.muted, lineHeight: 1.8 } }, '正在从 AtCoder 题库随机抽题，并抓题面与题解来判断它属于哪个知识点，请稍候…'),
+            )
+          : null,
         weak
           ? h(
               Card,
@@ -1151,7 +1166,7 @@ window.__ModuleLoader__.load({
               h(
                 'div',
                 { style: { fontSize: 11.5, color: C.muted, marginTop: 6, lineHeight: 1.7 } },
-                '判断依据：题目命中的 tag 落在你风险最高的知识点上；难度窗口按你已通过题的中位/75 分位自动推。',
+                '判断依据：AtCoder 没有官方标签，这里用题面与题解里的关键词对照知识点名称/别名，命中词最多的最弱分支优先；难度窗口按你已通过题的中位/75 分位自动推。',
               ),
               h(
                 'div',
@@ -1163,7 +1178,9 @@ window.__ModuleLoader__.load({
                 ),
               ),
             )
-          : h(Empty, null, '这次没挑出题来——可能是题库缓存没拉下来，或者弱点 tag 在题库里没有对应题。稍后再点一次「换一道」。'),
+          : loading || preparing
+            ? null
+            : h(Empty, null, '这次没挑出题来——可能是题库缓存没拉下来，或者题面/题解里没命中可测的知识点。稍后再点一次「换一道」。'),
       )
     }
 
@@ -1495,19 +1512,9 @@ window.__ModuleLoader__.load({
             h(
               Btn,
               {
-                onClick: async () => {
-                  let result = await app.call('weakProblem', { exclude: weakSeenList() }, { silent: true })
-                  if (result && !result.item) {
-                    forgetWeakSeen()
-                    result = await app.call('weakProblem', {}, { silent: true })
-                  }
-                  if (result && result.item) {
-                    rememberWeakSeen(result.item.key)
-                    setWeakPick(result)
-                  }
-                },
-                disabled: app.busy || !state,
-                title: '随机抽一批题，挑一道命中你最弱知识点的练习',
+                onClick: () => setWeakPick({ preparing: true }),
+                disabled: !state,
+                title: '从 AtCoder 题库随机抽几道新题，挑一道最戳你弱点的',
                 tone: 'primary',
               },
               '🎯 薄弱题',
@@ -3039,7 +3046,7 @@ window.__ModuleLoader__.load({
         if (quizPreparing) return
         setQuizPreparing(true)
         try {
-          const result = await call('sampleQuiz', { size: 3 })
+          const result = await call('sampleQuiz', { size: 3 }, { silent: true })
           const keys = (result && result.items ? result.items : []).map((item) => item.key).filter(Boolean)
           if (keys.length) {
             setQuizKeys(keys)
