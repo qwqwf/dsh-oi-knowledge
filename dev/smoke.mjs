@@ -83,6 +83,8 @@ const p1 = service.addProblem({
   tags: ['bitmasks', 'dp', 'math'],
   verdict: 'solved',
   essence: '异或求和先拆位，每一位独立算区间贡献。',
+  statement:
+    'You are given an array a of n non-negative integers. For every pair 1 <= l <= r <= n, let f(l,r) be the bitwise xor of a_l..a_r. Find the sum of (r-l+1) * f(l,r) over all pairs, modulo 998244353. n <= 2*10^5.',
   solution: '按位拆开，每一位统计区间异或为 1 的贡献。',
   insights: [
     { kind: 'observation', text: '把异或按位拆开后，答案变成每一位上「区间异或为 1」的子数组计数。' },
@@ -275,6 +277,39 @@ check('题目洞察只留展示字段', state.problems.every((problem) => (probl
   Object.keys(insight).every((key) => ['id', 'kind', 'text', 'nodes', 'obsNodes', 'key'].includes(key)),
 )))
 check('overview 带观察统计', typeof state.overview.obsUnassigned === 'number' && typeof state.overview.keyObservations === 'number')
+
+section('训练：闪卡 / quiz / 组卷')
+const flash = service.trainCard({ kind: 'pattern' })
+check('闪卡能抽出句式卡', Boolean(flash.card && flash.card.cardId && flash.card.question), flash.card && flash.card.cardId)
+const mark = service.trainMarkCard({ cardId: flash.card.cardId, level: 'good', ms: 4200 })
+check('闪卡复习记录写入', service.kb().training.reviews[flash.card.cardId].length === 1 && mark.stats.total === 1)
+const problemCard = service.trainCard({ kind: 'problem' })
+check(
+  '题面卡给的是题面而非精髓',
+  Boolean(problemCard.card) && problemCard.card.question.length >= 120 && problemCard.card.question !== p1.problem.essence,
+  problemCard.card && `${problemCard.card.question.length} chars`,
+)
+check('句式卡正面不含结论箭头', !/[⇒→]|\\Rightarrow|\\rightarrow|->|=>/.test(flash.card.question), flash.card.question)
+store.mutate((kb) => {
+  const filler = '给定 $N$ 与长度 $M$，求一段半开区间最多覆盖多少个点，$1\\le N\\le 10^5$。'
+  for (const problem of kb.problems || []) {
+    if (problem.essence) problem.statementZh = `题意（中文）：${filler}`
+  }
+})
+const zhCard = service.trainCard({ kind: 'problem' })
+check('题面卡优先中文简版', Boolean(zhCard.card) && zhCard.card.question.startsWith('题意（中文）'), zhCard.card && zhCard.card.question.slice(0, 24))
+const attempt = service.trainAttempt({ problem: 'codeforces:1879D', text: '先拆每一位，再对每个位置单独算贡献', ms: 90000 })
+check('思路提交不揭示答案', attempt.attempt.round === 1 && attempt.attempt.result === null && !service.trainReveal({ problem: 'codeforces:1879D' }).summary.includes('还没写精髓'))
+const reviewHit = service.trainReview({ problem: 'codeforces:1879D', hit: true, round: 1 })
+check('方向命中后揭示真值', reviewHit.revealed === true && reviewHit.summary.includes('精髓'))
+const grade = service.trainGrade({ problem: 'codeforces:1879D', result: 'hit1', note: '拆位方向正确' })
+check('成绩可记录', grade.result === 'hit1')
+const session = service.sessionStart({ keys: ['arc166_a', 'arc170_a'] })
+service.sessionTouch({ session: session.session.id, problem: 'arc166_a' })
+const finish = service.sessionFinish({ session: session.session.id, acTimes: { arc166_a: new Date(Date.now()).toISOString() } })
+check('组卷结算有每题用时', finish.rows.length === 2 && finish.rows[0].ms !== null && finish.rows[1].ms === null)
+const stats = service.trainStats()
+check('训练统计可输出', stats.summary.includes('闪卡') && stats.summary.includes('第一轮命中') && state.training)
 
 console.log(`\n${failures === 0 ? 'ALL PASS' : `${failures} FAILURE(S)`}  (data: ${dir})`)
 process.exit(failures === 0 ? 0 : 1)

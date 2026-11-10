@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.2.12'
+    const CLIENT_BUILD = '1.3.5'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -2895,6 +2895,24 @@ window.__ModuleLoader__.load({
     }
 
     // ── 训练 ─────────────────────────────────────────────────────────────
+    // 闪卡的题面 / 真值按行排，空行留间距，· 开头做缩进，避免一大段挤在一起。
+    function RichLines({ text, style }) {
+      const lines = String(text == null ? '' : text).split('\n')
+      return h(
+        'div',
+        { style: Object.assign({ display: 'flex', flexDirection: 'column', gap: 3 }, style || {}) },
+        lines.map((line, index) => {
+          if (!line.trim()) return h('div', { key: `gap-${index}`, style: { height: 5 } })
+          const bullet = /^[·•-]\s*/.test(line)
+          return h(
+            'div',
+            { key: `line-${index}`, style: { paddingLeft: bullet ? 12 : 0, textIndent: bullet ? -9 : 0 } },
+            h(MathText, { text: line }),
+          )
+        }),
+      )
+    }
+
     function TrainingTab() {
       const { state, call, busy } = useStore()
       const training = state.training || {}
@@ -3016,8 +3034,8 @@ window.__ModuleLoader__.load({
                 'div',
                 { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
                 h('div', { style: { fontSize: 11.5, color: C.muted } }, `${card.kind === 'pattern' ? '补结论' : '看题找观察'}${card.nodePath ? ` · ${card.nodePath}` : ''}`),
-                h('div', { style: { fontSize: 13.5, lineHeight: 1.85 } }, h(MathText, { text: card.question })),
-                flipped ? h('div', { style: { borderLeft: `2px solid ${C.brand}`, paddingLeft: 10 } }, h(MathText, { text: card.answer })) : null,
+                h('div', { style: { fontSize: 13.5, lineHeight: 1.85 } }, h(RichLines, { text: card.question })),
+                flipped ? h('div', { style: { borderLeft: `2px solid ${C.brand}`, paddingLeft: 10, lineHeight: 1.8 } }, h(RichLines, { text: card.answer })) : null,
                 h(
                   'div',
                   { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
