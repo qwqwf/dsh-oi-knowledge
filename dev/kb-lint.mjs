@@ -63,6 +63,7 @@ function checkText(where, key, text, field) {
 for (const problem of kb.problems || []) {
   checkText('problem', problem.key, problem.essence, 'essence')
   checkText('problem', problem.key, problem.statement, 'statement')
+  checkText('problem', problem.key, problem.statementZh, 'statementZh')
   checkText('problem', problem.key, problem.solution, 'solution')
   for (const insight of problem.insights || []) {
     checkText('insight', `${problem.key}#${insight.id || ''}`, insight.text, 'text')
