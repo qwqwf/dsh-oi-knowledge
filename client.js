@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.5'
+    const CLIENT_BUILD = '1.3.6'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -3084,7 +3084,7 @@ window.__ModuleLoader__.load({
                       'div',
                       { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
                       h('div', { style: { fontSize: 11.5, color: C.muted } }, `已开题 · 用时 ${fmt(now - quizStartedAt)}`),
-                      h('div', { style: { maxHeight: 260, overflow: 'auto', fontSize: 12.5, lineHeight: 1.75, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10 } }, h(MathText, { text: quizItem.statement || '（这道题没有题面）' })),
+                      h('div', { style: { maxHeight: 260, overflow: 'auto', fontSize: 12.5, lineHeight: 1.75, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10 } }, h(RichLines, { text: quizItem.statementZh || quizItem.statement || '（这道题没有题面）' })),
                       h('textarea', {
                         value: draft,
                         onChange: (event) => setDraft(event.target.value),
