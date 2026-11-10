@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.14'
+    const CLIENT_BUILD = '1.3.19'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -1122,7 +1122,7 @@ window.__ModuleLoader__.load({
         Overlay,
         {
           title: '薄弱题推荐',
-          subtitle: '从 AtCoder 题库随机抽几道新题，挑一道最戳你弱点的',
+          subtitle: '从 AtCoder / Codeforces 题库随机抽几道新题，挑一道最戳你弱点的',
           onClose: props.onClose,
           actions: preparing ? null : h(Btn, { onClick: again, disabled: loading, tone: 'primary' }, loading ? '正在为您准备题目…' : '换一道'),
         },
@@ -1131,7 +1131,7 @@ window.__ModuleLoader__.load({
               Card,
               null,
               h(SectionTitle, { first: true }, '正在为您准备题目'),
-              h('div', { style: { fontSize: 12.5, color: C.muted, lineHeight: 1.8 } }, '正在从 AtCoder 题库随机抽题，并抓题面与题解来判断它属于哪个知识点，请稍候…'),
+              h('div', { style: { fontSize: 12.5, color: C.muted, lineHeight: 1.8 } }, '正在从 AtCoder / Codeforces 题库随机抽题，抓题面/翻译后判断它属于哪个知识点，请稍候…'),
             )
           : null,
         weak
@@ -1181,7 +1181,7 @@ window.__ModuleLoader__.load({
               h(
                 'div',
                 { style: { fontSize: 11.5, color: C.muted, marginTop: 6, lineHeight: 1.7 } },
-                '判断依据：AtCoder 没有官方标签，这里用题面与题解里的关键词对照知识点名称/别名，命中词最多的最弱分支优先；难度窗口按你已通过题的中位/75 分位自动推。',
+                '判断依据：Codeforces 用题目自带标签，AtCoder 没有官方标签，用题面与题解里的关键词对照知识点名称/别名，命中词最多的最弱分支优先；难度窗口按你已通过题的中位/75 分位自动推。',
               ),
               h(
                 'div',
@@ -1531,7 +1531,7 @@ window.__ModuleLoader__.load({
               {
                 onClick: () => setWeakPick({ preparing: true }),
                 disabled: !state,
-                title: '从 AtCoder 题库随机抽几道新题，挑一道最戳你弱点的',
+                title: '从 AtCoder / Codeforces 题库随机抽几道新题，挑一道最戳你弱点的',
                 tone: 'primary',
               },
               '🎯 薄弱题',
@@ -3088,7 +3088,7 @@ window.__ModuleLoader__.load({
         setQuizStartedAt(0)
       }
 
-      // 「换一批」直接去 AtCoder 原题库抽：后端抓题面/题解需要几秒，先显示准备提示。
+      // 「换一批」直接去 AtCoder / Codeforces 原题库抽：后端抓题面/翻译需要几秒，先显示准备提示。
       const nextBatch = async () => {
         if (quizPreparing) return
         setQuizPreparing(true)
@@ -3245,7 +3245,7 @@ window.__ModuleLoader__.load({
                       onClick: nextBatch,
                       disabled: quizPreparing,
                       style: { fontSize: 11.5 },
-                      title: '从 AtCoder 题库随机抽新题（自动跳过做过的和已在池里的）',
+                      title: '从 AtCoder / Codeforces 题库随机抽新题（自动跳过做过的和已在池里的）',
                     },
                     quizPreparing ? '正在为您准备题目…' : '换一批',
                   ),
