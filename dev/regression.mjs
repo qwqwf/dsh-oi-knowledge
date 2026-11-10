@@ -103,7 +103,7 @@ function check(name, ok, extra = '') {
     }
   })
   const service = new KnowledgeService(store)
-  check('账号题量: 跨平台求和', service.listAccounts().summary.includes('已同步 4 题'))
+  check('账号题量: 本平台 + 镜像分开计', service.listAccounts().summary.includes('已同步 1 题（含 3 道镜像题）'))
   service.removeAccount({ platform: 'luogu', handle: 'v' })
   const left = store.load()
   check(
