@@ -11,7 +11,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { KbError, KbStore, defaultDataDir } from './lib/store.js'
 import { KnowledgeService } from './lib/service.js'
-import { setHostTranslate, setHostWebFetch } from './lib/sync.js'
+import { setHostTranslate, setHostTranslateProbe, setHostWebFetch, setTranslateSession } from './lib/sync.js'
 
 export const inject = ['tools']
 
@@ -396,7 +396,7 @@ function registerTools(ctx, service) {
         properties: {
           action: {
             type: 'string',
-            enum: ['card', 'mark', 'attempt', 'judge', 'review', 'reveal', 'grade', 'session_start', 'session_touch', 'session_finish', 'stats', 'sample', 'repair', 'refill'],
+            enum: ['card', 'mark', 'attempt', 'judge', 'review', 'reveal', 'grade', 'session_start', 'session_touch', 'session_finish', 'stats', 'sample', 'repair', 'refill', 'probe', 'pending', 'apply_zh'],
           },
           kind: { type: 'string', enum: ['pattern', 'problem'], description: 'card：卡片类型' },
           node: { type: 'string', description: 'card：限定某个观察节点' },
@@ -417,13 +417,33 @@ function registerTools(ctx, service) {
             description: 'session_finish：题号 → AC 时间（ISO 或毫秒时间戳）',
           },
           size: { type: 'number', description: 'sample：抽几道新题（1–6，默认 3）' },
+          items: {
+            type: 'array',
+            description: 'apply_zh：回填中文题意，元素形如 { ref: "atcoder:abc123_f", zh: "…", titleZh: "…" }',
+            items: {
+              type: 'object',
+              properties: {
+                ref: { type: 'string' },
+                zh: { type: 'string' },
+                titleZh: { type: 'string' },
+              },
+              required: ['ref'],
+            },
+          },
         },
       },
       timeoutMs: 180000,
       output: SUMMARY_OUTPUT,
-      async execute(args) {
+      async execute(args, exec) {
         try {
+          if (exec?.agent?.id) setTranslateSession(exec.agent.id)
           switch (args.action) {
+            case 'probe':
+              return toolOk(await service.probeTranslate({ text: args.text }))
+            case 'pending':
+              return toolOk(service.pendingTranslations({ limit: args.size }))
+            case 'apply_zh':
+              return toolOk(service.applyTranslations({ items: args.items }))
             case 'card':
               return toolOk(service.trainCard({ kind: args.kind, node: args.node }))
             case 'mark':
@@ -655,26 +675,100 @@ export function apply(ctx, config = {}) {
 
   // 抽题时要中文：优先用宿主 translator（质量好），拿不到再退回 MyMemory；
   // Codeforces 题面被反爬拦截，走宿主 web.fetch 兜底。
+  let translatorWired = false
   ctx.inject(['translator'], (c) => {
+    translatorWired = true
     const translator = c.translator
-    setHostTranslate(async (text) => {
-      // 单个 provider 可能被限流：依次试 bing / google / 默认，取第一个非空结果。
-      for (const provider of ['bing', 'google', undefined]) {
+
+    const providerId = (entry) => (typeof entry === 'string' ? entry : entry?.id || entry?.provider || '')
+    const providerOrder = ['deepseek-official', 'deepseek-account', 'bing', 'google']
+
+    async function providerList() {
+      let available = []
+      try {
+        available = (await translator.availableProviders()) || []
+      } catch (_) {
+        available = []
+      }
+      const ids = available.map(providerId).filter(Boolean)
+      const preferred = providerOrder.filter((id) => ids.includes(id))
+      const rest = ids.filter((id) => !providerOrder.includes(id))
+      return [...preferred, ...rest, undefined]
+    }
+
+    async function tryTranslate(text, sessionId) {
+      let session = sessionId
+      if (!session) {
         try {
-          const spec = translator.resolve(
-            provider ? { text, targetLanguage: 'zh-CN', provider } : { text, targetLanguage: 'zh-CN' },
-          )
+          session = c.agents?.currentInitiator?.()?.id
+        } catch (_) {
+          session = undefined
+        }
+      }
+      for (const provider of await providerList()) {
+        try {
+          const request = { text, targetLanguage: 'zh-CN' }
+          if (provider) request.provider = provider
+          if (session) request.sessionId = session
+          const spec = translator.resolve(request)
           const out = await translator.translate(spec)
-          if (out && String(out).trim()) return String(out)
+          const value = typeof out === 'string' ? out : out?.text || out?.translation
+          if (value && /[\u4e00-\u9fff]/.test(String(value))) return { provider: provider || '(default)', value: String(value) }
         } catch (_) {
           /* 换下一个 provider */
         }
       }
-      return ''
+      return null
+    }
+
+    setHostTranslate(async (text, options) => {
+      const hit = await tryTranslate(text, options?.sessionId)
+      return hit ? hit.value : ''
+    })
+
+    setHostTranslateProbe(async (text) => {
+      const rows = []
+      for (const provider of await providerList()) {
+        const started = Date.now()
+        try {
+          const request = { text, targetLanguage: 'zh-CN' }
+          if (provider) request.provider = provider
+          const spec = translator.resolve(request)
+          const out = await translator.translate(spec)
+          const value = typeof out === 'string' ? out : out?.text || out?.translation
+          rows.push({
+            provider: provider || '(default)',
+            ms: Date.now() - started,
+            chinese: Boolean(value && /[\u4e00-\u9fff]/.test(String(value))),
+            sample: String(value || '').slice(0, 60),
+          })
+        } catch (error) {
+          rows.push({ provider: provider || '(default)', ms: Date.now() - started, error: String(error?.message || error).slice(0, 80) })
+        }
+      }
+      return rows
     })
   })
   ctx.inject(['web'], (c) => {
     const web = c.web
     setHostWebFetch(async (url) => web.fetch({ url }))
   })
+
+  if (!translatorWired) {
+    setHostTranslateProbe(async () => {
+      let direct = false
+      try {
+        direct = Boolean(ctx.get?.('translator'))
+      } catch (_) {
+        direct = false
+      }
+      return [
+        {
+          provider: '(none)',
+          ok: false,
+          note: `翻译服务没有被注入（ctx.get('translator') = ${direct}）。请检查 translator 插件是否在当前 profile 里启用。`,
+        },
+      ]
+    })
+  }
 }

@@ -125,6 +125,9 @@ oi_train action=session_touch session=s... problem="atcoder:abc382_e"
 oi_train action=session_finish session=s... acTimes="abc382_e = 2026-11-10T12:34:00+08:00"
 oi_train action=stats
 oi_train action=refill size=6     # 补货：抽新题、抓英文题面，由模型翻译后用 oi_problem update 回填中文
+oi_train action=probe             # 诊断：逐个翻译 provider 试翻译，看哪个能用
+oi_train action=pending limit=6   # 取出排队等中文的题目英文原文
+oi_train action=apply_zh items='[{"ref":"atcoder:abc233_h","zh":"…","titleZh":"…"}]'  # 回填中文
 ```
 
 ## 训练
@@ -132,7 +135,7 @@ oi_train action=refill size=6     # 补货：抽新题、抓英文题面，由�
 面板新增「训练」标签页，三块内容：
 
 1. **观察闪卡**：按观察节点抽一条有证据的句式，只显示触发条件，让主人补结论后翻面自评（忘了 / 勉强想起 / 想起来了 / 太简单）。按节点统计召回率与下次到期，优先抽召回率低和「卡点 = 没找到观察」的题。
-2. **新题方向定向**（P1）：面板一次给 3 道候选。点「换一批」会**优先从已翻译好的中文题池里随机抽题**（秒回，不依赖外部翻译接口；同一道题 3 天内不重复出现）。新题补货用 `oi_train action=refill`：从 AtCoder 与 Codeforces 两个原库混合随机抽题（1200–2600 分，自动跳过做过的、已在池里的），抓英文题面写入 quiz 池（`pool='quiz'`，未通过、不挂树、不计统计、不进相似度基线），并把英文原文返回给模型；模型翻译后用 `oi_problem action=update` 回填 `statementZh` / `titleZh`，补货完成的题才进入可抽池。AtCoder 题同时抓官方题解；Codeforces 站内有反爬，题面经宿主 `web.fetch` 抓取，题解没有官方接口，只保留标签与难度。面板只展示中文题意与中文标题：中文未就绪时只提示「中文题意还没整理好」，不展示英文原文；中文标题由 `titleZh` 提供，缺失时回退原名。选定后给题面、计时、自由文本输入，提交后面板直接判方向：`trainJudge` 用你的文字与 essence/关键观察/洞察做词与字双重覆盖，命中就揭示关键观察，没命中先提示再想一个，两轮不中或点「公布真值」才展示完整精髓；现抽的新题还没有 essence 时，用官方题解的要点兜底判方向。成绩记 `hit1` / `hit2` / `miss`，并可用 `oi_train action=review/grade` 在对话里复核。
+2. **新题方向定向**（P1）：面板一次给 3 道候选。点「换一批」会**实时从 AtCoder 与 Codeforces 原库混合随机抽题**（1200–2600 分，自动跳过做过的、已在池里的），抓英文题面写入 quiz 池（`pool='quiz'`，未通过、不挂树、不计统计、不进相似度基线）。题面会先试宿主 `translator` 翻译；翻译服务不可用时（本机 profile 当前未装载 translator）不阻塞抽题，题目先入库并把 `platform:key` 放进 `kb.training.translateQueue` 队列，summary 提示「已排队」；随后由模型用 `oi_train action=pending` 取英文原文、翻译后用 `oi_train action=apply_zh` 回填，或等 `translator` 可用后由 `translateToChinese` 自动补。AtCoder 题同时抓官方题解；Codeforces 站内有反爬，题面经宿主 `web.fetch` 抓取，题解没有官方接口，只保留标签与难度。同一道题 3 天内不重复出现（`quizShown`）。面板只展示中文题意与中文标题：中文未就绪时只提示「中文题意已经排进翻译队列」，不展示英文原文；中文标题由 `titleZh` 提供，缺失时回退原名。选定后给题面、计时、自由文本输入，提交后面板直接判方向：`trainJudge` 用你的文字与 essence/关键观察/洞察做词与字双重覆盖，命中就揭示关键观察，没命中先提示再想一个，两轮不中或点「公布真值」才展示完整精髓；现抽的新题还没有 essence 时，用官方题解的要点兜底判方向。成绩记 `hit1` / `hit2` / `miss`，并可用 `oi_train action=review/grade` 在对话里复核。
 3. **组卷器**（P2）：输入 5 个题号开始一场 2 小时 virtual；每题点「打开」记录开题时间；交卷时填各题 AC 时间（留空则从账号同步的 AC 时间自动补），插件算「用时 = AC − max(场次开始, 开题时间)」，汇总每题用时、是否 AC、卡点与方向命中。
 
 ## 两棵树，各管一件事
