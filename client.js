@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.7'
+    const CLIENT_BUILD = '1.3.8'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -2980,13 +2980,25 @@ window.__ModuleLoader__.load({
         setQuizStartedAt(Date.now())
       }
 
-      const nextQuiz = () => {
+      const [quizKeys, setQuizKeys] = React.useState([])
+
+      React.useEffect(() => {
+        if (!quizKeys.length && quizList.length) setQuizKeys(quizList.slice(0, 3).map((item) => item.key))
+      }, [quizList.length])
+
+      const quizBatch = quizKeys.map((key) => quizList.find((item) => item.key === key)).filter(Boolean)
+
+      const nextBatch = () => {
         if (!quizList.length) return
-        const tried = new Set((training.attempts || []).map((item) => item.problemKey))
-        const fresh = quizList.filter((item) => item.key !== quizKey && !tried.has(item.key))
-        const rest = quizList.filter((item) => item.key !== quizKey)
-        const pool = fresh.length ? fresh : rest.length ? rest : quizList
-        pickQuiz(pool[Math.floor(Math.random() * pool.length)].key)
+        const others = quizList.filter((item) => !quizKeys.includes(item.key))
+        const pool = others.length >= 3 ? others : quizList
+        const shuffled = pool.slice().sort(() => Math.random() - 0.5).slice(0, 3)
+        setQuizKeys(shuffled.map((item) => item.key))
+        setQuizKey('')
+        setDraft('')
+        setQuizFeedback(null)
+        setQuizRevealed(false)
+        setQuizStartedAt(0)
       }
 
       const quizAttempts = (training.attempts || []).filter((item) => item.problemKey === quizKey)
@@ -2994,27 +3006,15 @@ window.__ModuleLoader__.load({
       const submitAttempt = async () => {
         const item = quizList.find((entry) => entry.key === quizKey)
         if (!item || !draft.trim()) return
-        const result = await call(
-          'trainAttempt',
-          { problem: item.key, text: draft, ms: quizStartedAt ? Date.now() - quizStartedAt : undefined },
-          { silent: true },
-        )
+        const ms = quizStartedAt ? Date.now() - quizStartedAt : undefined
+        await call('trainAttempt', { problem: item.key, text: draft, ms }, { silent: true })
+        const judge = await call('trainJudge', { problem: item.key, text: draft }, { silent: true })
         setQuizFeedback({
-          tone: 'idle',
-          text:
-            (result && result.summary) ||
-            '已记录这轮思路。把同一段发到对话里，我会对照真值判方向；也可以直接自评下面两个按钮。',
+          tone: judge && judge.hit ? 'success' : judge && judge.revealed ? 'warn' : 'idle',
+          text: (judge && judge.summary) || '已记录这轮思路。',
         })
+        if (judge && judge.revealed) setQuizRevealed(true)
         setDraft('')
-      }
-
-      const selfReview = async (hit) => {
-        const item = quizList.find((entry) => entry.key === quizKey)
-        if (!item) return
-        const round = Math.min(2, quizAttempts.length || 1)
-        const result = await call('trainReview', { problem: item.key, hit, round }, { silent: true })
-        setQuizFeedback({ tone: hit ? 'success' : 'warn', text: (result && result.summary) || '已记录。' })
-        if (result && result.revealed) setQuizRevealed(true)
       }
 
       const revealQuiz = async () => {
@@ -3102,7 +3102,7 @@ window.__ModuleLoader__.load({
                 h(
                   'div',
                   { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
-                  ...quizList.slice(0, 12).map((item) =>
+                  ...quizBatch.map((item) =>
                     h(
                       Btn,
                       {
@@ -3122,7 +3122,7 @@ window.__ModuleLoader__.load({
                       h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
                         h('span', { style: { fontSize: 11.5, color: C.muted } }, `已开题 · 用时 ${fmt(now - quizStartedAt)}${quizAttempts.length ? ` · 已提交 ${quizAttempts.length} 轮` : ''}`),
                         h('div', { style: { flex: 1 } }),
-                        h(Btn, { onClick: nextQuiz, style: { fontSize: 11.5 } }, '换一题'),
+                        h(Btn, { onClick: nextBatch, style: { fontSize: 11.5 } }, '换一批'),
                       ),
                       h('div', { style: { maxHeight: 260, overflow: 'auto', fontSize: 12.5, lineHeight: 1.75, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10 } }, h(RichLines, { text: quizItem.statementZh || quizItem.statement || '（这道题没有题面）' })),
                       h('textarea', {
@@ -3136,13 +3136,11 @@ window.__ModuleLoader__.load({
                         'div',
                         { style: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' } },
                         h(Btn, { onClick: submitAttempt, disabled: !draft.trim(), tone: 'primary' }, '提交思路'),
-                        h(Btn, { onClick: () => selfReview(true), style: { fontSize: 11.5 } }, '方向对'),
-                        h(Btn, { onClick: () => selfReview(false), style: { fontSize: 11.5 } }, '方向不对'),
                         h(Btn, { onClick: revealQuiz, style: { fontSize: 11.5 } }, quizRevealed ? '再看真值' : '公布真值'),
                       ),
                       quizFeedback
                         ? h('div', { style: { borderLeft: `2px solid ${quizFeedback.tone === 'success' ? C.success : quizFeedback.tone === 'warn' ? C.warn : C.border}`, paddingLeft: 10, fontSize: 12.5, lineHeight: 1.8, background: C.layer2, borderRadius: 6, padding: '8px 10px' } }, h(RichLines, { text: quizFeedback.text }))
-                        : h('div', { style: { fontSize: 11.5, color: C.muted } }, '提交后会记录这轮思路；点「方向对 / 方向不对」立即得到反馈，或把同一段发到对话里让我判。'),
+                        : h('div', { style: { fontSize: 11.5, color: C.muted } }, '提交后会在下方直接给出判定：命中就揭示关键观察，没命中先提示再想一个，两轮不中再给真值。'),
                     )
                   : null,
               )

@@ -387,7 +387,7 @@ function registerTools(ctx, service) {
         properties: {
           action: {
             type: 'string',
-            enum: ['card', 'mark', 'attempt', 'review', 'reveal', 'grade', 'session_start', 'session_touch', 'session_finish', 'stats'],
+            enum: ['card', 'mark', 'attempt', 'judge', 'review', 'reveal', 'grade', 'session_start', 'session_touch', 'session_finish', 'stats'],
           },
           kind: { type: 'string', enum: ['pattern', 'problem'], description: 'card：卡片类型' },
           node: { type: 'string', description: 'card：限定某个观察节点' },
@@ -420,6 +420,8 @@ function registerTools(ctx, service) {
               return toolOk(service.trainMarkCard({ cardId: args.cardId, level: args.level, ms: args.ms }))
             case 'attempt':
               return toolOk(service.trainAttempt({ problem: args.problem, text: args.text, ms: args.ms }))
+            case 'judge':
+              return toolOk(service.trainJudge({ problem: args.problem, text: args.text, round: args.round }))
             case 'review':
               return toolOk(service.trainReview({ problem: args.problem, hit: args.hit, round: args.round }))
             case 'reveal':
