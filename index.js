@@ -204,12 +204,14 @@ function registerTools(ctx, service) {
           key: { type: 'string', description: '题号：CF 1879D，AtCoder abc300_f，洛谷 P1234' },
           url: { type: 'string', description: '题目链接（可替代 platform + key）' },
           title: { type: 'string', description: '题目标题' },
+          titleZh: { type: 'string', description: '中文标题（面板优先显示）' },
           rating: { type: 'number', description: '难度分（CF rating / 洛谷换算分）' },
           tags: { type: 'array', items: { type: 'string' }, description: '题目标签，如 ["dp","greedy"]' },
           verdict: { type: 'string', enum: ['solved', 'attempted', 'unsolved', 'unknown'], description: '状态：已通过 / 试过没过 / 没做出来 / 未知' },
           difficulty: { type: 'string', description: '自定义难度标记' },
           essence: { type: 'string', description: '一句话说清这题最精髓的部分（核心观察或最关键的转化），比题解重要' },
           statement: { type: 'string', description: '题意摘要' },
+          statementZh: { type: 'string', description: '中文题意' },
           solution: { type: 'string', description: '题解（可整段贴）' },
           nodes: { type: 'array', items: { type: 'string' }, description: '要挂的知识点（id / 路径 / 名字）' },
           pool: {
@@ -272,6 +274,7 @@ function registerTools(ctx, service) {
                   problem: args.problem,
                   patch: {
                     title: args.title,
+                    titleZh: args.titleZh,
                     url: args.url,
                     rating: args.rating,
                     tags: args.tags,
@@ -279,6 +282,7 @@ function registerTools(ctx, service) {
                     difficulty: args.difficulty,
                     essence: args.essence,
                     statement: args.statement,
+                    statementZh: args.statementZh,
                     solution: args.solution,
                     nodes: args.nodes,
                   },
@@ -380,7 +384,8 @@ function registerTools(ctx, service) {
         '  grade — 记录成绩（problem + result: hit1/hit2/miss）；',
         '  session_start / session_touch / session_finish — 组卷：开始、记开题时间、结算（acTimes 传 key→时间戳）；',
         '  stats — 召回率与方向命中统计；',
-        '  sample — 从 AtCoder/Codeforces 原库随机抽题进 quiz 池（可带 size）；',
+        '  sample — 面板用：从本地已译题库抽一批中文新题（不足会提示补货）；',
+        '  refill — 补货：从 AtCoder/Codeforces 原库抽新题、抓英文题面入库，把原文返回给模型翻译，翻好用 oi_problem update 回填；',
         '  repair — 补抓 quiz 池里题面缺失的题（走宿主 web 抓取并翻成中文）。',
         '面板提交思路时会自动调用 judge；review 留给对话里的人工复核。',
       ].join('\n'),
@@ -391,7 +396,7 @@ function registerTools(ctx, service) {
         properties: {
           action: {
             type: 'string',
-            enum: ['card', 'mark', 'attempt', 'judge', 'review', 'reveal', 'grade', 'session_start', 'session_touch', 'session_finish', 'stats', 'sample', 'repair'],
+            enum: ['card', 'mark', 'attempt', 'judge', 'review', 'reveal', 'grade', 'session_start', 'session_touch', 'session_finish', 'stats', 'sample', 'repair', 'refill'],
           },
           kind: { type: 'string', enum: ['pattern', 'problem'], description: 'card：卡片类型' },
           node: { type: 'string', description: 'card：限定某个观察节点' },
@@ -445,6 +450,9 @@ function registerTools(ctx, service) {
               return toolOk(await service.sampleQuiz({ size: args.size || 3 }))
             case 'repair':
               return toolOk(await service.repairQuizStatements())
+            case 'refill':
+              // 补货：抽新题、抓英文题面入库，把英文原文返回给模型翻译；翻好后用 oi_problem update 回填中文。
+              return toolOk(await service.sampleQuiz({ size: args.size || 6, deferTranslate: true }))
             default:
               return { ok: false, summary: `未知 action：${args.action}` }
           }
