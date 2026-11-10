@@ -91,6 +91,12 @@ check('括号数学', render(String.raw`前 \(n\) 后`), (out) => out.includes('
 check('块级数学', render('$$a+b$$'), (out) => out.includes('display') || out.includes('a+b'), '包含 a+b')
 check('未闭合美元', render('价格 $5 元'), (out) => out.includes('$5'), '保留原始 $5')
 check('多个数学段', render('$a$ 和 $b$'), (out) => (out.match(/<span>/g) || []).length >= 2 && out.includes('和'), '两段数学与连接词')
+check(
+  '英文题面不整句包公式',
+  test.autoMathify('For each i = 1, 2, \\ldots, N , the i -th card has an integer A_i written on the front.'),
+  (out) => !/^\$For each/.test(out) && out.includes('the $i$ -th') && (out.match(/\$/g) || []).length % 2 === 0,
+  '只包 token，不包整句',
+)
 
 let failed = 0
 for (const item of cases) {

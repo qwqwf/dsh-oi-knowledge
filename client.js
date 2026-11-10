@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.19'
+    const CLIENT_BUILD = '1.3.20'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -594,6 +594,45 @@ window.__ModuleLoader__.load({
     const MATH_SIGNAL_RE = /[_^\\\[\]]|[<>=≤≥≠≡⇒⇔]|\b[A-Za-z]\b|\bO\(|\d+[A-Za-z]/
     const ENGLISH_WORD_RE = /\b[a-z]{4,}\b/
 
+    function isMathToken(token) {
+      if (!token) return false
+      if (/[\\_^]/.test(token)) return true
+      if (/^[A-Za-z]$/.test(token)) return !/^[a]$/.test(token)
+      if (/^\d+([.,]\d+)?[)\],.;:]*$/.test(token)) return true
+      if (/^[A-Za-z][A-Za-z0-9]*\($/.test(token) || /^\)$/.test(token)) return true
+      if (/^[^A-Za-z0-9]+$/.test(token)) return true
+      return false
+    }
+
+    // 只把连续的数学 token 包起来，避免把整句英文塞进公式（math 模式会把空格吃掉、全变斜体）
+    function wrapMathSpans(piece) {
+      if (!piece || !MATH_SIGNAL_RE.test(piece)) return piece
+      const tokens = piece.split(/(\s+)/)
+      const out = []
+      let buffer = []
+      const flush = () => {
+        if (!buffer.length) return
+        const raw = buffer.join('')
+        out.push(wrapMathChunk(raw))
+        buffer = []
+      }
+      for (const token of tokens) {
+        if (!token) continue
+        if (/^\s+$/.test(token)) {
+          if (buffer.length) buffer.push(token)
+          else out.push(token)
+          continue
+        }
+        if (isMathToken(token)) buffer.push(token)
+        else {
+          flush()
+          out.push(token)
+        }
+      }
+      flush()
+      return out.join('')
+    }
+
     function wrapMathChunk(chunk) {
       const lead = (chunk.match(/^\s*/) || [''])[0]
       const trail = (chunk.match(/\s*$/) || [''])[0]
@@ -607,12 +646,16 @@ window.__ModuleLoader__.load({
         (m, name) => `\\${name} `,
       )
       if (!core || core.length > 160) return chunk
+      // 句末标点留在公式外面，避免 $B_i .$ 这种奇怪的内边距
+      const tailPunct = (core.match(/[.,;:]+$/) || [''])[0]
+      if (tailPunct) core = core.slice(0, -tailPunct.length).trim()
+      if (!core) return chunk
       if (!SAFE_MATH_RE.test(core)) return chunk
       if (!MATH_SIGNAL_RE.test(core)) return chunk
       // 普通英文句子（无算符、无反斜杠、无下标）不要误包成数学
       if (!/[=_^\\[\]<>=≤≥≠≡+\-*/]/.test(core) && ENGLISH_WORD_RE.test(core)) return chunk
       if (dollars % 2 !== 0) return chunk
-      return `${lead}$${core}$${trail}`
+      return `${lead}$${core}$${tailPunct}${trail}`
     }
 
     function autoMathify(text) {
@@ -628,7 +671,7 @@ window.__ModuleLoader__.load({
           return pieces
             .map((piece) => {
               if (!piece || /[\u4e00-\u9fff，。；：！？、「」『』（）]/.test(piece)) return piece
-              return wrapMathChunk(piece)
+              return wrapMathSpans(piece)
             })
             .join('')
         })
