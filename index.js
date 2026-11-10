@@ -364,6 +364,86 @@ function registerTools(ctx, service) {
     }),
   )
 
+  disposers.push(
+    ctx.tools.register({
+      name: 'oi_train',
+      description: [
+        '训练：观察召回闪卡、新题方向定向（quiz 池 + 对话判分）、组卷器。',
+        'action 取值：',
+        '  card — 抽一张闪卡（kind=pattern 补结论 / problem 看题找观察，留空随机）；',
+        '  mark — 记录闪卡复习结果（cardId + level: again/hard/good/easy，可带 ms）；',
+        '  attempt — 提交一道新题的思路（problem + text，不揭示答案）；',
+        '  review — 判方向是否命中（problem + hit + round），命中或第二轮才返回真值；',
+        '  reveal — 直接看真值；',
+        '  grade — 记录成绩（problem + result: hit1/hit2/miss）；',
+        '  session_start / session_touch / session_finish — 组卷：开始、记开题时间、结算（acTimes 传 key→时间戳）；',
+        '  stats — 召回率与方向命中统计。',
+        '判方向时由模型对照真值判断，工具只负责记录与揭示。',
+      ].join('\n'),
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['action'],
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['card', 'mark', 'attempt', 'review', 'reveal', 'grade', 'session_start', 'session_touch', 'session_finish', 'stats'],
+          },
+          kind: { type: 'string', enum: ['pattern', 'problem'], description: 'card：卡片类型' },
+          node: { type: 'string', description: 'card：限定某个观察节点' },
+          cardId: { type: 'string', description: 'mark：闪卡 id' },
+          level: { type: 'string', enum: ['again', 'hard', 'good', 'easy'], description: 'mark：复习结果' },
+          problem: { type: 'string', description: '题目：id、platform:key 或链接' },
+          text: { type: 'string', description: 'attempt：你写的思路' },
+          hit: { type: 'boolean', description: 'review：方向是否命中' },
+          round: { type: 'number', description: 'review：第几轮（1 / 2）' },
+          ms: { type: 'number', description: '用时的毫秒数' },
+          result: { type: 'string', enum: ['hit1', 'hit2', 'miss'], description: 'grade：最终成绩' },
+          note: { type: 'string', description: 'grade：评语' },
+          session: { type: 'string', description: '组卷场次 id' },
+          keys: { type: 'array', items: { type: 'string' }, description: 'session_start：题号列表' },
+          acTimes: {
+            type: 'object',
+            additionalProperties: { type: 'string' },
+            description: 'session_finish：题号 → AC 时间（ISO 或毫秒时间戳）',
+          },
+        },
+      },
+      timeoutMs: 60000,
+      output: SUMMARY_OUTPUT,
+      async execute(args) {
+        try {
+          switch (args.action) {
+            case 'card':
+              return toolOk(service.trainCard({ kind: args.kind, node: args.node }))
+            case 'mark':
+              return toolOk(service.trainMarkCard({ cardId: args.cardId, level: args.level, ms: args.ms }))
+            case 'attempt':
+              return toolOk(service.trainAttempt({ problem: args.problem, text: args.text, ms: args.ms }))
+            case 'review':
+              return toolOk(service.trainReview({ problem: args.problem, hit: args.hit, round: args.round }))
+            case 'reveal':
+              return toolOk(service.trainReveal({ problem: args.problem }))
+            case 'grade':
+              return toolOk(service.trainGrade({ problem: args.problem, result: args.result, note: args.note, ms: args.ms }))
+            case 'session_start':
+              return toolOk(service.sessionStart({ keys: args.keys }))
+            case 'session_touch':
+              return toolOk(service.sessionTouch({ session: args.session, problem: args.problem }))
+            case 'session_finish':
+              return toolOk(service.sessionFinish({ session: args.session, acTimes: args.acTimes }))
+            case 'stats':
+              return toolOk(service.trainStats())
+            default:
+              return { ok: false, summary: `未知 action：${args.action}` }
+          }
+        } catch (error) {
+          return toolError(error)
+        }
+      },
+    }),
+  )
+
   return () => {
     for (const dispose of disposers) {
       try {

@@ -33,6 +33,7 @@ plugin_manager action=remove_bundle target=dsh-oi-knowledge
 | **知识树** | 左上角可切换「知识 / 思路 / 观察」三棵树。知识树看掌握度、题数、洞察、推荐练习题；思路树看关联题数与洞察数；观察树看每个观察方向挂了多少条精髓观察，节点详情列出对应题目（可点击跳到题目页）与子方向；观察句式按「真题证据」标注：至少 2 道题的 observation 能支撑才标为已验证并附例，其余灰显为未验证。三棵树都能改名/改备注、加子节点、移动、删除。 |
 | **题目** | 题目列表与筛选；录入新题目（链接自动补全标题/评分/标签），可以写一句「精髓」；题目详情里按类型管理洞察、改状态、标记「卡在哪一步」、重新分类、编辑精髓/题面/题解。 |
 | **弱点** | 概览（覆盖、非常熟练/熟练/还行/不熟练/非常不熟练/空白、思路覆盖率）、知识点风险榜、最该补的思路、反套路推荐、标签覆盖表、未归类的已通过题。 |
+| **训练** | 观察闪卡、新题方向定向（quiz 池 + 提交思路）、组卷器（开题计时、AC 时间、每题用时）。 |
 | **账号** | 绑定/同步/移除 Codeforces、AtCoder、洛谷 账号，查看数据目录。 |
 
 所有数据本地保存，面板与对话工具读写同一份文件。
@@ -109,6 +110,29 @@ oi_account action=remove platform=luogu handle=123456
 ```
 
 同步之后，`oi_kb action=report` / `gaps` / `recommend` 会把这些已通过的题算进掌握度。
+
+### `oi_train` —— 训练
+
+```
+oi_train action=card                     # 抽一张闪卡（观察句式 / 题面）
+oi_train action=mark cardId=... level=good ms=8000   # again/hard/good/easy
+oi_train action=attempt problem="atcoder:abc382_e" text="先求分布，再按剩余量 DP"
+oi_train action=review problem="atcoder:abc382_e" hit=true round=1
+oi_train action=reveal problem="atcoder:abc382_e"
+oi_train action=grade problem="atcoder:abc382_e" result=hit1 note="方向对了"
+oi_train action=session_start keys="abc382_e,abc294_g"
+oi_train action=session_touch session=s... problem="atcoder:abc382_e"
+oi_train action=session_finish session=s... acTimes="abc382_e = 2026-11-10T12:34:00+08:00"
+oi_train action=stats
+```
+
+## 训练
+
+面板新增「训练」标签页，三块内容：
+
+1. **观察闪卡**：按观察节点抽一条有证据的句式，只显示触发条件，让主人补结论后翻面自评（忘了 / 勉强想起 / 想起来了 / 太简单）。按节点统计召回率与下次到期，优先抽召回率低和「卡点 = 没找到观察」的题。
+2. **新题方向定向**（P1）：候选全部来自 quiz 池（`pool='quiz'`，未通过、不挂树、不计统计、不进相似度基线）。面板给题面、计时、自由文本输入，提交只存 pending attempt，不揭示答案；主人把同一段方向发到对话里，由模型对照 essence 与关键观察判定是否命中，两轮不中或放弃才揭示真值。成绩记 `hit1` / `hit2` / `miss`。
+3. **组卷器**（P2）：输入 5 个题号开始一场 2 小时 virtual；每题点「打开」记录开题时间；交卷时填各题 AC 时间（留空则从账号同步的 AC 时间自动补），插件算「用时 = AC − max(场次开始, 开题时间)」，汇总每题用时、是否 AC、卡点与方向命中。
 
 ## 两棵树，各管一件事
 
@@ -218,6 +242,17 @@ $$
 | ▲ | 不熟练 | 已通过 $\ge 2$ 道 |
 | ▽ | 非常不熟练 | 只通过 1 道，或只有洞察没有通过记录 |
 | ○ | 空白 | 这个节点还没有任何通过记录或洞察 |
+
+观察树节点用另一套判定：「有真题证据」指该观察方向上有多少道题的 observation 撑腰，加上归纳出的句式里有多少条已拿到 $\ge 2$ 道真题证据：
+
+| 标记 | 档位 | 观察树判定 |
+| --- | --- | --- |
+| ◆ | 非常熟练 | 有证据句式 $\ge 3$ 且涉及题 $\ge 10$ |
+| ● | 熟练 | 有证据句式 $\ge 2$ 且涉及题 $\ge 5$ |
+| ◐ | 还行 | 精髓观察 $\ge 8$ 条，或涉及题 $\ge 4$ |
+| ▲ | 不熟练 | 精髓观察 $\ge 3$ 条 |
+| ▽ | 非常不熟练 | 只有 1–2 条观察 |
+| ○ | 空白 | 还没有任何观察或句式 |
 | · | 未测 | 账号数据落不到这个节点 |
 
 手写 `mastery` 会直接指定档位（`expert` / `strong` / `ok` / `weak` / `poor` / `unknown`），不再走自动判定。

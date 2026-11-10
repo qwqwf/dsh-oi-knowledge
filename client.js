@@ -1,7 +1,10 @@
 /**
- * dsh-oi-knowledge —?Web 面板
+ * dsh-oi-knowledge — Web 面板
  *
- * 一个单文件 React 面板：知识树 / 题目 / 弱点 / 账号 四个 tab? * 数据全部?Host 注册?/plugins/dsh-oi-knowledge/api/* 路由? * 因此这里只依?react 与浏览器自身?fetch? */
+ * 一个单文件 React 面板：知识树 / 题目 / 弱点 / 账号 四个 tab。
+ * 数据全部走 Host 注册的 /plugins/dsh-oi-knowledge/api/* 路由，
+ * 因此这里只依赖 react 与浏览器自身的 fetch。
+ */
 window.__ModuleLoader__.load({
   id: 'dsh-oi-knowledge',
   factory(require) {
@@ -10,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.2.5'
+    const CLIENT_BUILD = '1.2.12'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -124,7 +127,7 @@ window.__ModuleLoader__.load({
 
     const sx = (...parts) => Object.assign({}, ...parts.filter(Boolean))
 
-    // ── Host 路由解析：相对页?base 解析，兼容反代前缀 ──────────────────
+    // ── Host 路由解析：相对页面 base 解析，兼容反代前缀 ──────────────────
     function directoryBase() {
       const raw =
         typeof document !== 'undefined' && typeof document.baseURI === 'string' && document.baseURI !== ''
@@ -141,7 +144,91 @@ window.__ModuleLoader__.load({
       return new URL(API_PATH + String(path).replace(/^\/+/, ''), directoryBase())
     }
 
-    // 面板级记忆：薄弱题推荐过的题号。存?localStorage 里，
+    // 只把右侧详情栏拉回顶部；左栏（树/题目列表）保持主人自己滑到的位置。
+    function scrollDetailToTop() {
+      if (typeof document === 'undefined') return
+      const detail = document.getElementById('oi-detail-pane')
+      if (detail) detail.scrollTop = 0
+    }
+
+    // 右侧详情单独成滚动容器：整体高度固定，内部自己滚。
+    // 左栏同样是固定高度 + 内部滚动，所以点题时只重置右边，左栏位置不动。
+    function detailScrollWrap(child) {
+      return h(
+        'div',
+        {
+          id: 'oi-detail-pane',
+          className: 'oi-scroll',
+          style: {
+            flex: '2 1 320px',
+            minWidth: 230,
+            height: 'calc(100vh - 215px)',
+            overflow: 'auto',
+            borderRadius: 10,
+          },
+        },
+        child,
+      )
+    }
+
+    // 面板级错误边界：某个页签渲染炸了也只在这个框里显示错误，不会把整个界面拖黑。
+    const ComponentBase =
+      React.Component ||
+      class {
+        constructor(props) {
+          this.props = props
+          this.state = {}
+        }
+
+        setState(next) {
+          this.state = Object.assign({}, this.state, typeof next === 'function' ? next(this.state) : next)
+        }
+      }
+    class PanelBoundary extends ComponentBase {
+      constructor(props) {
+        super(props)
+        this.state = { error: null }
+      }
+
+      static getDerivedStateFromError(error) {
+        return { error }
+      }
+
+      componentDidCatch(error) {
+        // 让错误同时进控制台，方便主人贴给我。
+        if (typeof console !== 'undefined' && console.error) console.error('[oi-knowledge] panel crashed:', error)
+      }
+
+      render() {
+        if (this.state.error) {
+          return h(
+            'div',
+            {
+              style: {
+                margin: 14,
+                padding: '12px 14px',
+                border: `1px solid ${C.warn}`,
+                borderRadius: 10,
+                background: C.layer1,
+                color: C.text,
+                fontSize: 12,
+                lineHeight: 1.8,
+              },
+            },
+            h('div', { style: { fontWeight: 600, marginBottom: 4 } }, '这个页签渲染出错了'),
+            h('div', { style: { color: C.muted } }, String(this.state.error && this.state.error.message ? this.state.error.message : this.state.error)),
+            h(
+              Btn,
+              { onClick: () => this.setState({ error: null }) },
+              '重试',
+            ),
+          )
+        }
+        return this.props.children
+      }
+    }
+
+    // 面板级记忆：薄弱题推荐过的题号。存在 localStorage 里，
     // 「换一道」「关掉浮层再点」甚至刷新页面之后都不会又从第一道开始。
     const WEAK_SEEN_STORAGE = 'oi-knowledge:weak-seen'
     function weakSeenList() {
@@ -169,8 +256,8 @@ window.__ModuleLoader__.load({
       return []
     }
 
-    // ── 轻量 LaTeX?? / $$?$ / \(…\) / \[…\] ?React 节点 ─────────────
-    // 客户端没?KaTeX（Builtin 只有 ctx/React/host/styles/console），
+    // ── 轻量 LaTeX：$…$ / $$…$$ / \(…\) / \[…\] 转 React 节点 ─────────────
+    // 客户端没有 KaTeX（Builtin 只有 ctx/React/host/styles/console），
     // 这里做一个够用的行内渲染：符号表 + 上下标 + 分式 + 根号 + 重音。
     const MATH_SYMBOLS = {
       le: '≤', leq: '≤', ge: '≥', geq: '≥', ne: '≠', neq: '≠', approx: '≈',
@@ -883,7 +970,7 @@ window.__ModuleLoader__.load({
         .filter(Boolean)
     }
 
-    // ── 浮层：薄弱题推荐 / 完整知识?────────────────────────────────────
+    // ── 浮层：薄弱题推荐 / 完整知识树 ────────────────────────────────────
     function Overlay(props) {
       return h(
         'div',
@@ -1176,7 +1263,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    // ── 数据上下?───────────────────────────────────────────────────────
+    // ── 数据上下文 ───────────────────────────────────────────────────────
     const StoreContext = React.createContext(null)
 
     function useStore() {
@@ -1281,6 +1368,7 @@ window.__ModuleLoader__.load({
     const TABS = [
       ['tree', '知识树'],
       ['problems', '题目'],
+      ['training', '训练'],
       ['weak', '弱点'],
       ['accounts', '账号'],
     ]
@@ -1292,7 +1380,7 @@ window.__ModuleLoader__.load({
       const [weakPick, setWeakPick] = React.useState(null)
       const [fullTree, setFullTree] = React.useState(false)
 
-      const body = !state
+      const content = !state
         ? h(
             Empty,
             null,
@@ -1304,9 +1392,12 @@ window.__ModuleLoader__.load({
           ? h(TreeTab)
           : app.tab === 'problems'
             ? h(ProblemsTab)
-            : app.tab === 'weak'
-              ? h(WeakTab)
-              : h(AccountsTab)
+            : app.tab === 'training'
+              ? h(TrainingTab)
+              : app.tab === 'weak'
+                ? h(WeakTab)
+                : h(AccountsTab)
+      const body = h(PanelBoundary, { key: app.tab }, content)
 
       return h(
         StoreContext.Provider,
@@ -1481,7 +1572,11 @@ window.__ModuleLoader__.load({
                 h(Btn, { onClick: () => app.setNotice('') }, '收起'),
               )
             : null,
-          h('main', { className: 'oi-scroll', style: { flex: 1, minHeight: 0, overflow: 'auto', padding: 14 } }, body),
+          h(
+            'main',
+            { id: 'oi-panel-main', className: 'oi-scroll', style: { flex: 1, minHeight: 0, overflow: 'auto', padding: 14 } },
+            body,
+          ),
           weakPick ? h(WeakPickOverlay, { result: weakPick, onClose: () => setWeakPick(null) }) : null,
           fullTree ? h(FullTreeOverlay, { onClose: () => setFullTree(false) }) : null,
         ),
@@ -1550,7 +1645,7 @@ window.__ModuleLoader__.load({
             h(Pill, { color: node.count ? C.brand : C.muted }, `观察 ${node.count} 条`),
           ),
           node.summary
-            ? h('div', { style: { fontSize: 12, color: C.muted, marginTop: 6, lineHeight: 1.7 } }, node.summary)
+            ? h('div', { style: { fontSize: 12, color: C.muted, marginTop: 6, lineHeight: 1.7 } }, h(MathText, { text: node.summary }))
             : null,
           h(
             'div',
@@ -1569,8 +1664,11 @@ window.__ModuleLoader__.load({
                 return h(
                   'div',
                   { key: index, style: { fontSize: 12, color: pattern && pattern.verified ? C.text : C.muted, lineHeight: 1.75, padding: '4px 0' } },
-                  `${pattern && pattern.verified ? '·' : '·[未验证]'} ${text}${names.length ? h('span', { style: { color: C.muted, fontSize: 11 } }, `　例：${names.slice(0, 3).join('、')}`) : null}`,
-            names.length ? h('span', { style: { color: C.muted, fontSize: 11 } }, `　例：${names.slice(0, 3).join('、')}`) : null,
+                  h('span', null, `${pattern && pattern.verified ? '· ' : '·[未验证] '}`),
+                  h(MathText, { text }),
+                  names.length
+                    ? h('span', { style: { color: C.muted, fontSize: 11 } }, `　例：${names.slice(0, 3).join('、')}`)
+                    : null,
                 )
               }),
             )
@@ -1628,7 +1726,12 @@ window.__ModuleLoader__.load({
                         h(MathText, { text: hit.insight.text }),
                       )
                     : hit.patternText
-                      ? h('div', { style: { fontSize: 11.5, color: C.muted, marginTop: 3, lineHeight: 1.7 } }, `例证：${hit.patternText}`)
+                      ? h(
+                          'div',
+                          { style: { fontSize: 11.5, color: C.muted, marginTop: 3, lineHeight: 1.7 } },
+                          '例证：',
+                          h(MathText, { text: hit.patternText }),
+                        )
                       : null,
                 ),
               )
@@ -1637,7 +1740,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    // ── 知识?───────────────────────────────────────────────────────────
+    // ── 知识点 ───────────────────────────────────────────────────────────
     function TreeTab() {
       const { state, call, busy } = useStore()
       const allNodes = state ? state.nodes : []
@@ -1694,7 +1797,10 @@ window.__ModuleLoader__.load({
           {
             key: node.id,
             className: 'oi-row',
-            onClick: () => setSelectedId(node.id),
+            onClick: () => {
+              setSelectedId(node.id)
+              scrollDetailToTop()
+            },
             style: {
               display: 'flex',
               alignItems: 'center',
@@ -1785,6 +1891,7 @@ window.__ModuleLoader__.load({
             flex: '1 1 250px',
             minWidth: 210,
             maxWidth: '100%',
+            height: 'calc(100vh - 215px)',
             display: 'flex',
             flexDirection: 'column',
             gap: 8,
@@ -1873,7 +1980,10 @@ window.__ModuleLoader__.load({
                       {
                         key: node.id,
                         className: 'oi-row',
-                        onClick: () => setSelectedId(node.id),
+                        onClick: () => {
+                          setSelectedId(node.id)
+                          scrollDetailToTop()
+                        },
                         style: {
                           padding: '4px 6px',
                           borderRadius: 6,
@@ -1943,9 +2053,9 @@ window.__ModuleLoader__.load({
 
       return h(
         'div',
-        { style: { display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'stretch' } },
+        { style: { display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' } },
         left,
-        right,
+        detailScrollWrap(right),
       )
     }
 
@@ -2084,7 +2194,7 @@ window.__ModuleLoader__.load({
                 ],
           ),
           node.summary
-            ? h('div', { style: { fontSize: 12, color: C.muted, marginTop: 6, lineHeight: 1.7 } }, node.summary)
+            ? h('div', { style: { fontSize: 12, color: C.muted, marginTop: 6, lineHeight: 1.7 } }, h(MathText, { text: node.summary }))
             : null,
           h(
             'div',
@@ -2174,12 +2284,13 @@ window.__ModuleLoader__.load({
           ? h(
               Card,
               null,
-              h(SectionTitle, { first: true }, `子方向（${children.length}）`),
+              h(SectionTitle, { first: true }, `识别信号（${(node.signals || []).length}）`),
               node.signals.map((signal, index) =>
                 h(
                   'div',
                   { key: index, style: { fontSize: 12, color: C.text, lineHeight: 1.75, padding: '4px 0' } },
-                  `· ${signal}`,
+                  '· ',
+                  h(MathText, { text: signal }),
                 ),
               ),
             )
@@ -2203,7 +2314,7 @@ window.__ModuleLoader__.load({
                   h(
                     'span',
                     { style: { fontSize: 11, color: C.muted } },
-                    child.tree === 'idea' ? `洞察 ${child.insightCount || 0} · ?${child.linkedProblems || 0}` : `?${child.solvedCount || 0}`,
+                    child.tree === 'idea' ? `洞察 ${child.insightCount || 0} · 关联题 ${child.linkedProblems || 0}` : `题 ${child.solvedCount || 0}`,
                   ),
                 ),
               ),
@@ -2255,7 +2366,7 @@ window.__ModuleLoader__.load({
                         onClick: () => openProblem(problem.id),
                         style: { fontSize: 12.5, color: C.text, flex: 1, cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3 },
                       },
-                      `${problem.title}?{problem.key}${problem.rating ? `?{problem.rating}` : ''}）`,
+                      `${problem.title}（${problem.key}${problem.rating ? ` · ${problem.rating}` : ''}）`,
                     ),
                       h(Pill, { color: direct ? C.muted : C.border }, direct ? '本节点' : '子节点'),
                   ),
@@ -2286,6 +2397,7 @@ window.__ModuleLoader__.load({
         if (focusProblem && focusProblem.id) {
           setSelectedId(focusProblem.id)
           setAdding(false)
+          scrollDetailToTop()
         }
       }, [focusProblem])
 
@@ -2304,7 +2416,17 @@ window.__ModuleLoader__.load({
 
       const left = h(
         'div',
-        { style: { flex: '1 1 260px', minWidth: 220, display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 } },
+        {
+          style: {
+            flex: '1 1 260px',
+            minWidth: 220,
+            height: 'calc(100vh - 215px)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            minHeight: 0,
+          },
+        },
         h(
           'div',
           { style: { display: 'flex', gap: 6 } },
@@ -2339,7 +2461,10 @@ window.__ModuleLoader__.load({
                   {
                     key: problem.id,
                     className: 'oi-row',
-                    onClick: () => setSelectedId(problem.id),
+                    onClick: () => {
+                      setSelectedId(problem.id)
+                      scrollDetailToTop()
+                    },
                     style: {
                       padding: '5px 6px',
                       borderRadius: 6,
@@ -2384,7 +2509,12 @@ window.__ModuleLoader__.load({
             ),
           )
 
-      return h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'stretch' } }, left, right)
+      return h(
+        'div',
+        { style: { display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' } },
+        left,
+        detailScrollWrap(right),
+      )
     }
 
     function AddProblemForm(props) {
@@ -2760,6 +2890,250 @@ window.__ModuleLoader__.load({
             }),
           ),
           h(Btn, { tone: 'primary', disabled: busy || !text.trim(), onClick: addInsight, style: { marginTop: 6 } }, '添加洞察'),
+        ),
+      )
+    }
+
+    // ── 训练 ─────────────────────────────────────────────────────────────
+    function TrainingTab() {
+      const { state, call, busy } = useStore()
+      const training = state.training || {}
+      const quizList = training.quiz || []
+      const sessions = training.sessions || []
+
+      const [card, setCard] = React.useState(null)
+      const [flipped, setFlipped] = React.useState(false)
+      const [cardStartedAt, setCardStartedAt] = React.useState(0)
+      const [cardLoading, setCardLoading] = React.useState(false)
+
+      const [quizKey, setQuizKey] = React.useState('')
+      const [draft, setDraft] = React.useState('')
+      const [quizStartedAt, setQuizStartedAt] = React.useState(0)
+      const [now, setNow] = React.useState(Date.now())
+
+      const [session, setSession] = React.useState(sessions.length ? sessions[sessions.length - 1] : null)
+      const [sessionKeys, setSessionKeys] = React.useState('')
+      const [acText, setAcText] = React.useState('')
+      const [sessionResult, setSessionResult] = React.useState(null)
+
+      React.useEffect(() => {
+        const timer = setInterval(() => setNow(Date.now()), 1000)
+        return () => clearInterval(timer)
+      }, [])
+
+      const fmt = (ms) => {
+        if (!ms || ms < 0) return '0:00'
+        const total = Math.floor(ms / 1000)
+        return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+      }
+
+      const drawCard = async () => {
+        setCardLoading(true)
+        try {
+          const result = await call('trainCard', {}, { silent: true })
+          if (result && result.card) {
+            setCard(result.card)
+            setFlipped(false)
+            setCardStartedAt(Date.now())
+          }
+        } finally {
+          setCardLoading(false)
+        }
+      }
+
+      const markCard = async (level) => {
+        if (!card) return
+        await call(
+          'trainMarkCard',
+          { cardId: card.cardId, level, ms: cardStartedAt ? Date.now() - cardStartedAt : undefined },
+          { silent: true },
+        )
+        setCard(null)
+        setCardStartedAt(0)
+      }
+
+      const pickQuiz = (key) => {
+        setQuizKey(key)
+        setDraft('')
+        setQuizStartedAt(Date.now())
+      }
+
+      const submitAttempt = async () => {
+        const item = quizList.find((entry) => entry.key === quizKey)
+        if (!item || !draft.trim()) return
+        await call(
+          'trainAttempt',
+          { problem: item.key, text: draft, ms: quizStartedAt ? Date.now() - quizStartedAt : undefined },
+          { silent: true },
+        )
+        setDraft('')
+        setQuizKey('')
+        setQuizStartedAt(0)
+      }
+
+      const startSession = async () => {
+        const keys = sessionKeys
+          .split(/[\s,，;；]+/)
+          .map((item) => item.trim())
+          .filter(Boolean)
+        if (!keys.length) return
+        const result = await call('sessionStart', { keys }, { silent: true })
+        if (result && result.session) {
+          setSession(result.session)
+          setSessionResult(null)
+        }
+      }
+
+      const touchProblem = async (key) => {
+        if (!session) return
+        await call('sessionTouch', { session: session.id, problem: key }, { silent: true })
+        window.open(`https://atcoder.jp/tasks/${key}`, '_blank', 'noopener')
+      }
+
+      const finishSession = async () => {
+        if (!session) return
+        const acTimes = {}
+        for (const line of acText.split(/\n+/)) {
+          const matched = line.match(/^\s*([^\s=]+)\s*=\s*(.+?)\s*$/)
+          if (matched) acTimes[matched[1]] = matched[2]
+        }
+        const result = await call('sessionFinish', { session: session.id, acTimes }, { silent: true })
+        if (result) setSessionResult(result)
+      }
+
+      const quizItem = quizList.find((entry) => entry.key === quizKey) || null
+
+      return h(
+        'div',
+        { className: 'oi-scroll', style: { display: 'flex', flexDirection: 'column', gap: 12, height: 'calc(100vh - 215px)', overflow: 'auto', paddingRight: 4 } },
+        h(
+          Card,
+          null,
+          h(SectionTitle, null, '观察闪卡'),
+          h('div', { style: { fontSize: 12, color: C.muted, marginBottom: 8 } }, '先自己补结论，再翻面；按真实感受打分，系统按召回率决定下次抽哪张。'),
+          card
+            ? h(
+                'div',
+                { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+                h('div', { style: { fontSize: 11.5, color: C.muted } }, `${card.kind === 'pattern' ? '补结论' : '看题找观察'}${card.nodePath ? ` · ${card.nodePath}` : ''}`),
+                h('div', { style: { fontSize: 13.5, lineHeight: 1.85 } }, h(MathText, { text: card.question })),
+                flipped ? h('div', { style: { borderLeft: `2px solid ${C.brand}`, paddingLeft: 10 } }, h(MathText, { text: card.answer })) : null,
+                h(
+                  'div',
+                  { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
+                  h(Btn, { onClick: () => setFlipped(true), disabled: flipped }, '翻面'),
+                  h(Btn, { onClick: () => markCard('again'), disabled: !flipped, tone: 'danger' }, '忘了'),
+                  h(Btn, { onClick: () => markCard('hard'), disabled: !flipped }, '勉强'),
+                  h(Btn, { onClick: () => markCard('good'), disabled: !flipped }, '想起来了'),
+                  h(Btn, { onClick: () => markCard('easy'), disabled: !flipped }, '太简单'),
+                  h(Btn, { onClick: drawCard, disabled: cardLoading }, '换一张'),
+                ),
+              )
+            : h(
+                'div',
+                { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+                h(Btn, { onClick: drawCard, disabled: cardLoading, tone: 'primary' }, cardLoading ? '抽卡中…' : '抽一张'),
+                h('span', { style: { fontSize: 12, color: C.muted } }, '题库：'+Object.keys(training.reviews || {}).length + ' 张已复习'),
+              ),
+        ),
+        h(
+          Card,
+          null,
+          h(SectionTitle, null, '新题方向定向'),
+          h('div', { style: { fontSize: 12, color: C.muted, marginBottom: 8 } }, '选一道没做过的新题，写下 1–2 句方向；提交后把同一段思路发到对话里，我对照真值判命中。'),
+          quizList.length
+            ? h(
+                'div',
+                { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+                h(
+                  'div',
+                  { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
+                  ...quizList.slice(0, 12).map((item) =>
+                    h(
+                      Btn,
+                      {
+                        key: item.key,
+                        onClick: () => pickQuiz(item.key),
+                        tone: quizKey === item.key ? 'primary' : undefined,
+                        style: { fontSize: 11.5 },
+                      },
+                      `${item.title || item.key}${item.rating ? ` · ${item.rating}` : ''}`,
+                    ),
+                  ),
+                ),
+                quizItem
+                  ? h(
+                      'div',
+                      { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+                      h('div', { style: { fontSize: 11.5, color: C.muted } }, `已开题 · 用时 ${fmt(now - quizStartedAt)}`),
+                      h('div', { style: { maxHeight: 260, overflow: 'auto', fontSize: 12.5, lineHeight: 1.75, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10 } }, h(MathText, { text: quizItem.statement || '（这道题没有题面）' })),
+                      h('textarea', {
+                        value: draft,
+                        onChange: (event) => setDraft(event.target.value),
+                        placeholder: '用 1–2 句写下这题的思路方向（例如：先看每个元素能否独立贡献，再对代价做二分）',
+                        rows: 3,
+                        style: { width: '100%', resize: 'vertical', fontSize: 12.5, lineHeight: 1.7, padding: 8, borderRadius: 8, border: `1px solid ${C.border}`, background: C.base, color: C.text },
+                      }),
+                      h(
+                        'div',
+                        { style: { display: 'flex', gap: 8 } },
+                        h(Btn, { onClick: submitAttempt, disabled: !draft.trim(), tone: 'primary' }, '提交思路'),
+                        h('span', { style: { fontSize: 11.5, color: C.muted, alignSelf: 'center' } }, '提交只记录，不揭示答案'),
+                      ),
+                    )
+                  : null,
+              )
+            : h(Empty, null, 'quiz 池还是空的。让我抓一批没做过的新题入库（pool=quiz）后再来。'),
+        ),
+        h(
+          Card,
+          null,
+          h(SectionTitle, null, '组卷'),
+          h('div', { style: { fontSize: 12, color: C.muted, marginBottom: 8 } }, '5 题 / 2 小时；点开每题时记录开题时间，结算时按 AC 时间戳算每题用时。'),
+          h(
+            'div',
+            { style: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' } },
+            h('input', {
+              value: sessionKeys,
+              onChange: (event) => setSessionKeys(event.target.value),
+              placeholder: '题号，空格分隔（如 arc166_a arc170_a）',
+              style: { flex: '1 1 320px', fontSize: 12, padding: '6px 8px', borderRadius: 8, border: `1px solid ${C.border}`, background: C.base, color: C.text },
+            }),
+            h(Btn, { onClick: startSession, disabled: !sessionKeys.trim() }, '开始场次'),
+          ),
+          session
+            ? h(
+                'div',
+                { style: { marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 } },
+                h('div', { style: { fontSize: 11.5, color: C.muted } }, `场次 ${session.id} · 开始 ${new Date(session.startedAt).toLocaleTimeString('zh-CN')}${session.endedAt ? ` · 已结束` : ''}`),
+                h(
+                  'div',
+                  { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+                  ...session.keys.map((key) =>
+                    h(
+                      'div',
+                      { key, style: { display: 'flex', gap: 8, alignItems: 'center' } },
+                      h('span', { style: { fontSize: 12.5, flex: 1 } }, key),
+                      h(Btn, { onClick: () => touchProblem(key), style: { fontSize: 11 } }, '打开'),
+                    ),
+                  ),
+                ),
+                h('textarea', {
+                  value: acText,
+                  onChange: (event) => setAcText(event.target.value),
+                  placeholder: '每行「题号 = AC 时间」，例如 arc166_a = 2026-11-10T19:40:00+08:00',
+                  rows: 3,
+                  style: { width: '100%', resize: 'vertical', fontSize: 12, padding: 8, borderRadius: 8, border: `1px solid ${C.border}`, background: C.base, color: C.text },
+                }),
+                h(Btn, { onClick: finishSession, tone: 'primary' }, '结算场次'),
+                sessionResult && sessionResult.summary
+                  ? h('div', { style: { fontSize: 12.5, lineHeight: 1.8 } }, h(MathText, { text: sessionResult.summary }))
+                  : null,
+                sessions.length > 1
+                  ? h('div', { style: { fontSize: 11.5, color: C.muted } }, `历史场次 ${sessions.length} 次`)
+                  : null,
+              )
+            : null,
         ),
       )
     }
