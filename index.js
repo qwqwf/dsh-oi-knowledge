@@ -11,6 +11,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { KbError, KbStore, defaultDataDir } from './lib/store.js'
 import { KnowledgeService } from './lib/service.js'
+import { setHostTranslate, setHostWebFetch } from './lib/sync.js'
 
 export const inject = ['tools']
 
@@ -84,7 +85,7 @@ function registerTools(ctx, service) {
           summary: { type: 'string', description: '一句话说明这个知识点在考什么' },
           signals: { type: 'array', items: { type: 'string' }, description: '看到什么样的题面特征就该想到它' },
           note: { type: 'string', description: '个人笔记' },
-          mastery: { type: 'string', enum: ['auto', 'strong', 'ok', 'weak', 'unknown'], description: '手动修正掌握度，auto 表示按数据算' },
+          mastery: { type: 'string', enum: ['auto', 'expert', 'strong', 'ok', 'weak', 'poor', 'unknown'], description: '手动修正掌握度，auto 表示按数据算' },
           aliases: { type: 'array', items: { type: 'string' }, description: '别名（用于自动识别题解里提到的知识点）' },
           mode: { type: 'string', enum: ['subtree', 'reparent'], description: 'remove 时子节点怎么处理，默认 subtree 一起删' },
           query: { type: 'string', description: 'search / obs_patterns 的关键词' },
@@ -388,7 +389,7 @@ function registerTools(ctx, service) {
         properties: {
           action: {
             type: 'string',
-            enum: ['card', 'mark', 'attempt', 'judge', 'review', 'reveal', 'grade', 'session_start', 'session_touch', 'session_finish', 'stats'],
+            enum: ['card', 'mark', 'attempt', 'judge', 'review', 'reveal', 'grade', 'session_start', 'session_touch', 'session_finish', 'stats', 'sample'],
           },
           kind: { type: 'string', enum: ['pattern', 'problem'], description: 'card：卡片类型' },
           node: { type: 'string', description: 'card：限定某个观察节点' },
@@ -405,12 +406,13 @@ function registerTools(ctx, service) {
           keys: { type: 'array', items: { type: 'string' }, description: 'session_start：题号列表' },
           acTimes: {
             type: 'object',
-            additionalProperties: { type: 'string' },
+            additionalProperties: { anyOf: [{ type: 'string' }, { type: 'number' }] },
             description: 'session_finish：题号 → AC 时间（ISO 或毫秒时间戳）',
           },
+          size: { type: 'number', description: 'sample：抽几道新题（1–6，默认 3）' },
         },
       },
-      timeoutMs: 60000,
+      timeoutMs: 180000,
       output: SUMMARY_OUTPUT,
       async execute(args) {
         try {
@@ -437,6 +439,8 @@ function registerTools(ctx, service) {
               return toolOk(service.sessionFinish({ session: args.session, acTimes: args.acTimes }))
             case 'stats':
               return toolOk(service.trainStats())
+            case 'sample':
+              return toolOk(await service.sampleQuiz({ size: args.size || 3 }))
             default:
               return { ok: false, summary: `未知 action：${args.action}` }
           }
@@ -587,7 +591,13 @@ function createApiRoute(service, getAdmission) {
         }
         if (req.method === 'POST' && route === 'call') {
           const raw = await readBody(req)
-          const payload = raw ? JSON.parse(raw) : {}
+          let payload
+          try {
+            payload = raw ? JSON.parse(raw) : {}
+          } catch (_) {
+            sendJson(res, 400, { error: 'invalid_json' }, req)
+            return
+          }
           const result = await service.uiCall(String(payload.op || ''), payload.args || {})
           sendJson(res, 200, { ok: true, result }, req)
           return
@@ -629,5 +639,19 @@ export function apply(ctx, config = {}) {
   ctx.inject(['webServer'], (c) => {
     c.effect(() => c.webServer.register(createApiRoute(service, () => admission)), 'oi-knowledge.http')
     c.effect(() => c.webServer.register(createAssetRoute()), 'oi-knowledge.assets')
+  })
+
+  // 抽题时要中文：优先用宿主 translator（质量好），拿不到再退回 MyMemory；
+  // Codeforces 题面被反爬拦截，走宿主 web.fetch 兜底。
+  ctx.inject(['translator'], (c) => {
+    const translator = c.translator
+    setHostTranslate(async (text) => {
+      const spec = translator.resolve({ text, targetLanguage: 'zh-CN' })
+      return translator.translate(spec)
+    })
+  })
+  ctx.inject(['web'], (c) => {
+    const web = c.web
+    setHostWebFetch(async (url) => web.fetch({ url }))
   })
 }

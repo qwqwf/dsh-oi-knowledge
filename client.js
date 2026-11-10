@@ -401,7 +401,7 @@ window.__ModuleLoader__.load({
               h(
                 'span',
                 { key: `sqrt${i}` },
-                'span',
+                '√',
                 h('span', { style: { borderTop: `1px solid ${C.text}`, paddingLeft: 2, marginLeft: 1 } }, ...mathTokens(inner.raw)),
               ),
             )
@@ -698,8 +698,22 @@ window.__ModuleLoader__.load({
         }
         script.onerror = () => {
           katexRuntime.status = 'failed'
+          katexRuntime.promise = null
           notifyKatexListeners()
           resolve(null)
+          // 失败不是终态：20 秒后允许重试，避免一次瞬时网络抖动让整场会话都没有公式。
+          if (!katexRuntime.retryTimer) {
+            katexRuntime.retryTimer = setTimeout(() => {
+              katexRuntime.retryTimer = null
+              if (katexRuntime.status === 'failed') {
+                katexRuntime.status = 'idle'
+                if (typeof window !== 'undefined' && window.katex) {
+                  katexRuntime.status = 'ready'
+                }
+                notifyKatexListeners()
+              }
+            }, 20000)
+          }
         }
         document.head.appendChild(script)
       })
@@ -787,14 +801,15 @@ window.__ModuleLoader__.load({
       const text = props && props.text != null ? props.text : ''
       const [katexVersion, setKatexVersion] = React.useState(0)
       React.useEffect(() => {
-        if (katexRuntime.status === 'ready' || katexRuntime.status === 'failed') return undefined
+        if (katexRuntime.status === 'ready') return undefined
         const listener = () => setKatexVersion((value) => value + 1)
         katexRuntime.listeners.add(listener)
-        ensureKatex()
+        // failed 时不要重新 ensureKatex，否则会立刻重复加载；等 20 秒重试把状态推回 idle 再试。
+        if (katexRuntime.status !== 'failed') ensureKatex()
         return () => {
           katexRuntime.listeners.delete(listener)
         }
-      }, [])
+      }, [katexVersion])
       const nodes = React.useMemo(() => renderRichText(text), [text, katexVersion])
       return h('span', { style: (props && props.style) || null }, nodes)
     }, (prev, next) => (prev.text != null ? prev.text : '') === (next.text != null ? next.text : ''))
@@ -1390,6 +1405,7 @@ window.__ModuleLoader__.load({
         setFocusProblem({ id: String(id), at: Date.now() })
         setTab('problems')
       }, [])
+      const clearFocusProblem = React.useCallback(() => setFocusProblem(null), [])
 
       return {
         state,
@@ -1404,6 +1420,7 @@ window.__ModuleLoader__.load({
         setError,
         focusProblem,
         openProblem,
+        clearFocusProblem,
       }
     }
 
@@ -2421,7 +2438,7 @@ window.__ModuleLoader__.load({
 
     // ── 题目 ─────────────────────────────────────────────────────────────
     function ProblemsTab() {
-      const { state, call, busy, focusProblem } = useStore()
+      const { state, call, busy, focusProblem, clearFocusProblem } = useStore()
       const [query, setQuery] = React.useState('')
       const [selectedId, setSelectedId] = React.useState(null)
       const [adding, setAdding] = React.useState(false)
@@ -2431,8 +2448,10 @@ window.__ModuleLoader__.load({
           setSelectedId(focusProblem.id)
           setAdding(false)
           scrollDetailToTop()
+          // 事件只消费一次：否则之后每次切回本页都会把选中项改回旧题。
+          clearFocusProblem()
         }
-      }, [focusProblem])
+      }, [focusProblem, clearFocusProblem])
 
       const problems = React.useMemo(() => {
         const word = query.trim().toLowerCase()
@@ -2653,6 +2672,7 @@ window.__ModuleLoader__.load({
       const problem = props.problem
       const { state, call, busy } = useStore()
       const [detail, setDetail] = React.useState(null)
+      const [detailError, setDetailError] = React.useState('')
       const [loading, setLoading] = React.useState(true)
       const [tick, setTick] = React.useState(0)
       const [kind, setKind] = React.useState('observation')
@@ -2665,8 +2685,15 @@ window.__ModuleLoader__.load({
       React.useEffect(() => {
         let cancelled = false
         setLoading(true)
+        setDetailError('')
         fetch(apiUrl(`problem?id=${encodeURIComponent(problem.id)}`), { credentials: 'same-origin', cache: 'no-store' })
-          .then((response) => (response.ok ? response.json() : null))
+          .then(async (response) => {
+            if (!response.ok) {
+              const text = await response.text().catch(() => '')
+              throw new Error(response.status === 401 || response.status === 403 ? '没有权限读取题目详情（登录状态可能过期了）' : `题目详情读取失败（HTTP ${response.status}）${text ? `：${text.slice(0, 120)}` : ''}`)
+            }
+            return response.json()
+          })
           .then((value) => {
             if (cancelled) return
             const entity = value && value.problem ? value.problem : null
@@ -2677,8 +2704,10 @@ window.__ModuleLoader__.load({
               setSolution(entity.solution || '')
             }
           })
-          .catch(() => {
-            if (!cancelled) setDetail(null)
+          .catch((error) => {
+            if (cancelled) return
+            setDetail(null)
+            setDetailError(error && error.message ? error.message : '题目详情读取失败')
           })
           .finally(() => {
             if (!cancelled) setLoading(false)
@@ -2831,6 +2860,14 @@ window.__ModuleLoader__.load({
                 h(MathText, { text: entity.essence }),
               )
             : null,
+          detailError
+            ? h(
+                'div',
+                { style: { marginTop: 6, padding: '6px 9px', borderLeft: `2px solid ${C.warn}`, background: C.base, fontSize: 12, color: C.warn, lineHeight: 1.7, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
+                h('span', null, `题面/题解没读出来：${detailError}`),
+                h(Btn, { onClick: () => setTick((value) => value + 1), style: { fontSize: 11.5 } }, '重试'),
+              )
+            : null,
           loading ? h('div', { style: { marginTop: 6, fontSize: 11.5, color: C.muted } }, '读取题面中…') : null,
         ),
         editingBody
@@ -2956,12 +2993,14 @@ window.__ModuleLoader__.load({
       const [flipped, setFlipped] = React.useState(false)
       const [cardStartedAt, setCardStartedAt] = React.useState(0)
       const [cardLoading, setCardLoading] = React.useState(false)
+      const [marking, setMarking] = React.useState(false)
 
       const [quizKey, setQuizKey] = React.useState('')
       const [draft, setDraft] = React.useState('')
       const [quizStartedAt, setQuizStartedAt] = React.useState(0)
       const [quizFeedback, setQuizFeedback] = React.useState(null)
       const [quizRevealed, setQuizRevealed] = React.useState(false)
+      const [submitting, setSubmitting] = React.useState(false)
       const [now, setNow] = React.useState(Date.now())
 
       const [session, setSession] = React.useState(sessions.length ? sessions[sessions.length - 1] : null)
@@ -2995,14 +3034,22 @@ window.__ModuleLoader__.load({
       }
 
       const markCard = async (level) => {
-        if (!card) return
-        await call(
-          'trainMarkCard',
-          { cardId: card.cardId, level, ms: cardStartedAt ? Date.now() - cardStartedAt : undefined },
-          { silent: true },
-        )
-        setCard(null)
-        setCardStartedAt(0)
+        if (!card || marking) return
+        setMarking(true)
+        try {
+          const result = await call(
+            'trainMarkCard',
+            { cardId: card.cardId, level, ms: cardStartedAt ? Date.now() - cardStartedAt : undefined },
+            { silent: true },
+          )
+          // 失败时保留卡片，别让一次网络抖动吞掉这次复习。
+          if (result) {
+            setCard(null)
+            setCardStartedAt(0)
+          }
+        } finally {
+          setMarking(false)
+        }
       }
 
       const pickQuiz = (key) => {
@@ -3073,17 +3120,25 @@ window.__ModuleLoader__.load({
       const quizAttempts = (training.attempts || []).filter((item) => item.problemKey === quizKey)
 
       const submitAttempt = async () => {
+        if (submitting) return
         const item = quizList.find((entry) => entry.key === quizKey)
-        if (!item || !draft.trim()) return
+        const text = draft.trim()
+        if (!item || !text) return
+        setSubmitting(true)
         const ms = quizStartedAt ? Date.now() - quizStartedAt : undefined
-        await call('trainAttempt', { problem: item.key, text: draft, ms }, { silent: true })
-        const judge = await call('trainJudge', { problem: item.key, text: draft }, { silent: true })
-        setQuizFeedback({
-          tone: judge && judge.hit ? 'success' : judge && judge.revealed ? 'warn' : 'idle',
-          text: (judge && judge.summary) || '已记录这轮思路。',
-        })
-        if (judge && judge.revealed) setQuizRevealed(true)
-        setDraft('')
+        try {
+          await call('trainAttempt', { problem: item.key, text, ms }, { silent: true })
+          const judge = await call('trainJudge', { problem: item.key, text }, { silent: true })
+          setQuizFeedback({
+            tone: judge && judge.hit ? 'success' : judge && judge.revealed ? 'warn' : 'idle',
+            text: (judge && judge.summary) || '已记录这轮思路。',
+          })
+          if (judge && judge.revealed) setQuizRevealed(true)
+          // 只清掉这次提交的文本；请求期间用户新打的字不动。
+          setDraft((current) => (current.trim() === text ? '' : current))
+        } finally {
+          setSubmitting(false)
+        }
       }
 
       const revealQuiz = async () => {
@@ -3144,12 +3199,12 @@ window.__ModuleLoader__.load({
                 h(
                   'div',
                   { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
-                  h(Btn, { onClick: () => setFlipped(true), disabled: flipped }, '翻面'),
-                  h(Btn, { onClick: () => markCard('again'), disabled: !flipped, tone: 'danger' }, '忘了'),
-                  h(Btn, { onClick: () => markCard('hard'), disabled: !flipped }, '勉强'),
-                  h(Btn, { onClick: () => markCard('good'), disabled: !flipped }, '想起来了'),
-                  h(Btn, { onClick: () => markCard('easy'), disabled: !flipped }, '太简单'),
-                  h(Btn, { onClick: drawCard, disabled: cardLoading }, '换一张'),
+                  h(Btn, { onClick: () => setFlipped(true), disabled: flipped || marking }, '翻面'),
+                  h(Btn, { onClick: () => markCard('again'), disabled: !flipped || marking, tone: 'danger' }, marking ? '记录中…' : '忘了'),
+                  h(Btn, { onClick: () => markCard('hard'), disabled: !flipped || marking }, '勉强'),
+                  h(Btn, { onClick: () => markCard('good'), disabled: !flipped || marking }, '想起来了'),
+                  h(Btn, { onClick: () => markCard('easy'), disabled: !flipped || marking }, '太简单'),
+                  h(Btn, { onClick: drawCard, disabled: cardLoading || marking }, '换一张'),
                 ),
               )
             : h(
@@ -3180,7 +3235,7 @@ window.__ModuleLoader__.load({
                         tone: quizKey === item.key ? 'primary' : undefined,
                         style: { fontSize: 11.5 },
                       },
-                      `${item.title || item.key}${item.rating ? ` · ${item.rating}` : ''}`,
+                      `${item.titleZh || item.title || item.key}${item.rating ? ` · ${item.rating}` : ''}`,
                     ),
                   ),
                   h('div', { style: { flex: 1 } }),
@@ -3196,14 +3251,14 @@ window.__ModuleLoader__.load({
                   ),
                 ),
                 quizPreparing
-                  ? h('div', { style: { fontSize: 12, color: C.muted, padding: '6px 0' } }, '正在从 AtCoder 题库随机抽题并抓题面，请稍候…')
+                  ? h('div', { style: { fontSize: 12, color: C.muted, padding: '6px 0' } }, '正在从 AtCoder / Codeforces 题库随机抽题并翻译题面，请稍候…')
                   : null,
                 quizItem
                   ? h(
                       'div',
                       { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
                       h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
-                        h('span', { style: { fontSize: 11.5, color: C.muted } }, `已开题 · 用时 ${fmt(now - quizStartedAt)}${quizAttempts.length ? ` · 已提交 ${quizAttempts.length} 轮` : ''}`),
+                        h('span', { style: { fontSize: 11.5, color: C.muted } }, `已开题 · 用时 ${fmt(now - quizStartedAt)}${quizAttempts.length ? ` · 已提交 ${quizAttempts.length} 轮` : ''} · ${quizItem.titleZh || quizItem.title}`),
                       ),
                       quizItem.statementZh
                         ? null
@@ -3212,6 +3267,7 @@ window.__ModuleLoader__.load({
                       h('textarea', {
                         value: draft,
                         onChange: (event) => setDraft(event.target.value),
+                        disabled: submitting,
                         placeholder: '用 1–2 句写下这题的思路方向（例如：先看每个元素能否独立贡献，再对代价做二分）',
                         rows: 3,
                         style: { width: '100%', resize: 'vertical', fontSize: 12.5, lineHeight: 1.7, padding: 8, borderRadius: 8, border: `1px solid ${C.border}`, background: C.base, color: C.text },
@@ -3219,7 +3275,7 @@ window.__ModuleLoader__.load({
                       h(
                         'div',
                         { style: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' } },
-                        h(Btn, { onClick: submitAttempt, disabled: !draft.trim(), tone: 'primary' }, '提交思路'),
+                        h(Btn, { onClick: submitAttempt, disabled: submitting || !draft.trim(), tone: 'primary' }, submitting ? '判定中…' : '提交思路'),
                         h(Btn, { onClick: revealQuiz, style: { fontSize: 11.5 } }, quizRevealed ? '再看真值' : '公布真值'),
                       ),
                       quizFeedback
