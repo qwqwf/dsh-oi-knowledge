@@ -368,17 +368,18 @@ function registerTools(ctx, service) {
     ctx.tools.register({
       name: 'oi_train',
       description: [
-        '训练：观察召回闪卡、新题方向定向（quiz 池 + 对话判分）、组卷器。',
+        '训练：观察召回闪卡、新题方向定向（quiz 池 + 会话内自动判方向）、组卷器。',
         'action 取值：',
         '  card — 抽一张闪卡（kind=pattern 补结论 / problem 看题找观察，留空随机）；',
         '  mark — 记录闪卡复习结果（cardId + level: again/hard/good/easy，可带 ms）；',
-        '  attempt — 提交一道新题的思路（problem + text，不揭示答案）；',
-        '  review — 判方向是否命中（problem + hit + round），命中或第二轮才返回真值；',
+        '  attempt — 提交一道新题的思路（problem + text，只记录不揭示）；',
+        '  judge — 自动判方向（problem + text，可带 round）：用 essence/关键观察/洞察做词与字双重覆盖，命中或第二轮才给真值；',
+        '  review — 人工判方向（problem + hit + round），命中或第二轮才返回真值；',
         '  reveal — 直接看真值；',
         '  grade — 记录成绩（problem + result: hit1/hit2/miss）；',
         '  session_start / session_touch / session_finish — 组卷：开始、记开题时间、结算（acTimes 传 key→时间戳）；',
         '  stats — 召回率与方向命中统计。',
-        '判方向时由模型对照真值判断，工具只负责记录与揭示。',
+        '面板提交思路时会自动调用 judge；review 留给对话里的人工复核。',
       ].join('\n'),
       parameters: {
         type: 'object',
