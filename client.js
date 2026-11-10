@@ -1731,11 +1731,33 @@ window.__ModuleLoader__.load({
       const [childName, setChildName] = React.useState('')
       const [childKind, setChildKind] = React.useState('concept')
 
-      const problems = state.problems.filter(
-        (problem) =>
-          problem.nodes.includes(node.id) ||
-          problem.insights.some((insight) => (insight.nodes || []).includes(node.id)),
-      )
+      const subtreeIds = React.useMemo(() => {
+        const children = new Map()
+        for (const item of state.nodes) {
+          if (!item.parent) continue
+          if (!children.has(item.parent)) children.set(item.parent, [])
+          children.get(item.parent).push(item.id)
+        }
+        const ids = new Set([node.id])
+        const stack = [node.id]
+        while (stack.length) {
+          const current = stack.pop()
+          for (const child of children.get(current) || []) {
+            if (!ids.has(child)) {
+              ids.add(child)
+              stack.push(child)
+            }
+          }
+        }
+        return ids
+      }, [node.id, state.nodes])
+
+      const touches = (problem, ids) =>
+        (problem.nodes || []).some((id) => ids.has(id)) ||
+        problem.insights.some((insight) => (insight.nodes || []).some((id) => ids.has(id)))
+      const directIds = React.useMemo(() => new Set([node.id]), [node.id])
+      const directProblems = state.problems.filter((problem) => touches(problem, directIds))
+      const problems = state.problems.filter((problem) => touches(problem, subtreeIds))
       const insights = []
       for (const problem of problems) {
         for (const insight of problem.insights) {
@@ -1930,7 +1952,7 @@ window.__ModuleLoader__.load({
         h(
           Card,
           null,
-          h(SectionTitle, { first: true }, `关联题目（${problems.length}）`),
+          h(SectionTitle, { first: true }, `关联题目（${problems.length}${problems.length > directProblems.length ? `，本节点 ${directProblems.length}` : ''}）`),
           problems.length
             ? problems.map((problem) =>
                 h(
@@ -1946,6 +1968,7 @@ window.__ModuleLoader__.load({
                     },
                   },
                   h(Pill, null, problem.platform === 'codeforces' ? 'CF' : problem.platform === 'atcoder' ? 'AT' : 'LG'),
+                  touches(problem, directIds) ? null : h(Pill, { color: C.muted, style: { padding: '0 4px', fontSize: 10 } }, '子节点'),
                   h(
                     'a',
                     {
