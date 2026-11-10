@@ -379,7 +379,9 @@ function registerTools(ctx, service) {
         '  reveal — 直接看真值；',
         '  grade — 记录成绩（problem + result: hit1/hit2/miss）；',
         '  session_start / session_touch / session_finish — 组卷：开始、记开题时间、结算（acTimes 传 key→时间戳）；',
-        '  stats — 召回率与方向命中统计。',
+        '  stats — 召回率与方向命中统计；',
+        '  sample — 从 AtCoder/Codeforces 原库随机抽题进 quiz 池（可带 size）；',
+        '  repair — 补抓 quiz 池里题面缺失的题（走宿主 web 抓取并翻成中文）。',
         '面板提交思路时会自动调用 judge；review 留给对话里的人工复核。',
       ].join('\n'),
       parameters: {
@@ -389,7 +391,7 @@ function registerTools(ctx, service) {
         properties: {
           action: {
             type: 'string',
-            enum: ['card', 'mark', 'attempt', 'judge', 'review', 'reveal', 'grade', 'session_start', 'session_touch', 'session_finish', 'stats', 'sample'],
+            enum: ['card', 'mark', 'attempt', 'judge', 'review', 'reveal', 'grade', 'session_start', 'session_touch', 'session_finish', 'stats', 'sample', 'repair'],
           },
           kind: { type: 'string', enum: ['pattern', 'problem'], description: 'card：卡片类型' },
           node: { type: 'string', description: 'card：限定某个观察节点' },
@@ -441,6 +443,8 @@ function registerTools(ctx, service) {
               return toolOk(service.trainStats())
             case 'sample':
               return toolOk(await service.sampleQuiz({ size: args.size || 3 }))
+            case 'repair':
+              return toolOk(await service.repairQuizStatements())
             default:
               return { ok: false, summary: `未知 action：${args.action}` }
           }
@@ -646,8 +650,19 @@ export function apply(ctx, config = {}) {
   ctx.inject(['translator'], (c) => {
     const translator = c.translator
     setHostTranslate(async (text) => {
-      const spec = translator.resolve({ text, targetLanguage: 'zh-CN' })
-      return translator.translate(spec)
+      // 单个 provider 可能被限流：依次试 bing / google / 默认，取第一个非空结果。
+      for (const provider of ['bing', 'google', undefined]) {
+        try {
+          const spec = translator.resolve(
+            provider ? { text, targetLanguage: 'zh-CN', provider } : { text, targetLanguage: 'zh-CN' },
+          )
+          const out = await translator.translate(spec)
+          if (out && String(out).trim()) return String(out)
+        } catch (_) {
+          /* 换下一个 provider */
+        }
+      }
+      return ''
     })
   })
   ctx.inject(['web'], (c) => {

@@ -3263,7 +3263,16 @@ window.__ModuleLoader__.load({
                       quizItem.statementZh
                         ? null
                         : h('div', { style: { fontSize: 11.5, color: C.muted, marginBottom: 4 } }, '（新抽的题暂无中文题意，下面是英文原文）'),
-                      h('div', { style: { maxHeight: 260, overflow: 'auto', fontSize: 12.5, lineHeight: 1.75, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10 } }, h(RichLines, { text: quizItem.statementZh || quizItem.statement || '（这道题没有题面）' })),
+                      h('div', { style: { maxHeight: 260, overflow: 'auto', fontSize: 12.5, lineHeight: 1.75, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10 } },
+                        quizItem.statementZh || quizItem.statement
+                          ? h(RichLines, { text: quizItem.statementZh || quizItem.statement })
+                          : h('div', { style: { color: C.muted } },
+                              '这道题暂时没抓到题面。',
+                              quizItem.url
+                                ? h('a', { href: quizItem.url, target: '_blank', rel: 'noreferrer', style: { color: C.brand, marginLeft: 6 } }, '在来源站点打开原题')
+                                : null,
+                            ),
+                      ),
                       h('textarea', {
                         value: draft,
                         onChange: (event) => setDraft(event.target.value),
