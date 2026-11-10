@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.29'
+    const CLIENT_BUILD = '1.3.30'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -119,7 +119,7 @@ window.__ModuleLoader__.load({
         '.oi-card:hover{border-color:var(--dsw-alias-border-l2)}',
         '.oi-code{display:block;margin:6px 0;padding:8px 10px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:7px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.55;white-space:pre;overflow-x:auto}',
         '.oi-code-inline{display:inline;padding:1px 5px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:5px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em;white-space:nowrap}',
-        '.oi-katex{display:inline-block;max-width:100%;margin:0 .16em;vertical-align:-.05em}',
+        '.oi-katex{display:inline-block;max-width:100%;margin:0 .3em;padding:0 .02em;vertical-align:-.06em;overflow:visible}',
         '.oi-katex-display{display:block;margin:6px 0;overflow-x:auto;overflow-y:hidden}',
       ].join('\n')
       document.head.appendChild(style)
