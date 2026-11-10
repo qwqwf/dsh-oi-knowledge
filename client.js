@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.11'
+    const CLIENT_BUILD = '1.3.12'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -3007,6 +3007,7 @@ window.__ModuleLoader__.load({
       }
 
       const [quizKeys, setQuizKeys] = React.useState([])
+      const [quizPreparing, setQuizPreparing] = React.useState(false)
 
       const pickBatch = () => {
         if (!quizList.length) return []
@@ -3025,16 +3026,41 @@ window.__ModuleLoader__.load({
 
       const quizBatch = quizKeys.map((key) => quizList.find((item) => item.key === key)).filter(Boolean)
 
-      const nextBatch = () => {
-        if (!quizList.length) return
-        const keys = pickBatch()
-        if (!keys.length) return
-        setQuizKeys(keys)
+      const resetQuizView = () => {
         setQuizKey('')
         setDraft('')
         setQuizFeedback(null)
         setQuizRevealed(false)
         setQuizStartedAt(0)
+      }
+
+      // 「换一批」直接去 AtCoder 原题库抽：后端抓题面/题解需要几秒，先显示准备提示。
+      const nextBatch = async () => {
+        if (quizPreparing) return
+        setQuizPreparing(true)
+        try {
+          const result = await call('sampleQuiz', { size: 3 })
+          const keys = (result && result.items ? result.items : []).map((item) => item.key).filter(Boolean)
+          if (keys.length) {
+            setQuizKeys(keys)
+            rememberQuizRecent(keys)
+            resetQuizView()
+          } else {
+            const fallback = pickBatch()
+            if (fallback.length) {
+              setQuizKeys(fallback)
+              resetQuizView()
+            }
+          }
+        } catch (_) {
+          const fallback = pickBatch()
+          if (fallback.length) {
+            setQuizKeys(fallback)
+            resetQuizView()
+          }
+        } finally {
+          setQuizPreparing(false)
+        }
       }
 
       const quizAttempts = (training.attempts || []).filter((item) => item.problemKey === quizKey)
@@ -3153,10 +3179,18 @@ window.__ModuleLoader__.load({
                   h('div', { style: { flex: 1 } }),
                   h(
                     Btn,
-                    { onClick: nextBatch, style: { fontSize: 11.5 }, title: '从池子里换一批（会整体替换上面三道）' },
-                    '换一批',
+                    {
+                      onClick: nextBatch,
+                      disabled: quizPreparing,
+                      style: { fontSize: 11.5 },
+                      title: '从 AtCoder 题库随机抽新题（自动跳过做过的和已在池里的）',
+                    },
+                    quizPreparing ? '正在为您准备题目…' : '换一批',
                   ),
                 ),
+                quizPreparing
+                  ? h('div', { style: { fontSize: 12, color: C.muted, padding: '6px 0' } }, '正在从 AtCoder 题库随机抽题并抓题面，请稍候…')
+                  : null,
                 quizItem
                   ? h(
                       'div',
@@ -3164,6 +3198,9 @@ window.__ModuleLoader__.load({
                       h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
                         h('span', { style: { fontSize: 11.5, color: C.muted } }, `已开题 · 用时 ${fmt(now - quizStartedAt)}${quizAttempts.length ? ` · 已提交 ${quizAttempts.length} 轮` : ''}`),
                       ),
+                      quizItem.statementZh
+                        ? null
+                        : h('div', { style: { fontSize: 11.5, color: C.muted, marginBottom: 4 } }, '（新抽的题暂无中文题意，下面是英文原文）'),
                       h('div', { style: { maxHeight: 260, overflow: 'auto', fontSize: 12.5, lineHeight: 1.75, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10 } }, h(RichLines, { text: quizItem.statementZh || quizItem.statement || '（这道题没有题面）' })),
                       h('textarea', {
                         value: draft,
