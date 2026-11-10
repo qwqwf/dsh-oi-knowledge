@@ -676,6 +676,8 @@ export function apply(ctx, config = {}) {
   // 抽题时要中文：优先用宿主 translator（质量好），拿不到再退回 MyMemory；
   // Codeforces 题面被反爬拦截，走宿主 web.fetch 兜底。
   let translatorWired = false
+  let translatorImpl = null
+  let llmImpl = null
   ctx.inject(['translator'], (c) => {
     translatorWired = true
     const translator = c.translator
@@ -721,10 +723,10 @@ export function apply(ctx, config = {}) {
       return null
     }
 
-    setHostTranslate(async (text, options) => {
+    translatorImpl = async (text, options) => {
       const hit = await tryTranslate(text, options?.sessionId)
       return hit ? hit.value : ''
-    })
+    }
 
     setHostTranslateProbe(async (text) => {
       const rows = []
@@ -771,4 +773,85 @@ export function apply(ctx, config = {}) {
       ]
     })
   }
+
+  // 没有安装 translator 插件时的兜底：直接用宿主 llm 服务做「模型翻译」。
+  // 用当前默认模型，按 1500 字左右切段翻译，超时 60 秒/段。
+  ctx.inject(['llm', 'agentDefaultModel'], (c) => {
+    const llm = c.llm
+    const modelOf = () => {
+      try {
+        const selection = c.agentDefaultModel.currentSelection()
+        return { provider: selection?.provider || '', model: selection?.model || '' }
+      } catch (_) {
+        return { provider: '', model: '' }
+      }
+    }
+
+    async function translateByModel(text) {
+      const { provider, model } = modelOf()
+      if (!provider || !model) return ''
+      const source = String(text || '').slice(0, 9000)
+      if (!source.trim()) return ''
+      const pieces = []
+      for (let i = 0; i < source.length; i += 1500) pieces.push(source.slice(i, i + 1500))
+      const done = []
+      for (const piece of pieces) {
+        try {
+          const signal = AbortSignal.timeout(60000)
+          let out = ''
+          const stream = llm.stream({
+            provider,
+            model,
+            system:
+              '你是算法竞赛题面的翻译器。把用户给的英文片段译成简体中文；数学记号保持 LaTeX 原样并用 $...$ 包住；不要解释、不要加标题、不要输出代码块。',
+            messages: [{ role: 'user', content: [{ type: 'text', text: piece }] }],
+            temperature: 0.1,
+            maxTokens: 2200,
+            signal,
+          })
+          for await (const chunk of stream) {
+            if (chunk?.type === 'text-delta' && chunk.text) out += chunk.text
+            if (chunk?.type === 'finish' && chunk.reason?.kind === 'error') break
+          }
+          if (out.trim()) done.push(out.trim())
+        } catch (_) {
+          /* 这一段失败就跳过，其余段继续 */
+        }
+      }
+      return done.join('\n')
+    }
+
+    llmImpl = async (text) => translateByModel(text)
+
+    setHostTranslateProbe(async (text) => {
+      if (translatorImpl) {
+        const value = await translatorImpl(text)
+        if (value) return [{ channel: 'translator', ok: true, sample: value.slice(0, 60) }]
+      }
+      const started = Date.now()
+      const value = await translateByModel(String(text || '').slice(0, 200))
+      return [
+        {
+          channel: 'llm',
+          model: modelOf(),
+          ok: Boolean(value),
+          ms: Date.now() - started,
+          sample: String(value || '').slice(0, 80),
+        },
+      ]
+    })
+  })
+
+  // 组合：translator 优先，拿不到（空/英文）就落到模型翻译。
+  setHostTranslate(async (text, options) => {
+    if (translatorImpl) {
+      const value = await translatorImpl(text, options)
+      if (value && /[\u4e00-\u9fff]/.test(value)) return value
+    }
+    if (llmImpl) {
+      const value = await llmImpl(text)
+      if (value) return value
+    }
+    return ''
+  })
 }
