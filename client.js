@@ -1361,14 +1361,16 @@ window.__ModuleLoader__.load({
           ? h(
               Card,
               null,
-              h(SectionTitle, { first: true }, `常见观察句式（${node.patterns.length}）`),
-              node.patterns.map((pattern, index) =>
-                h(
+              h(SectionTitle, { first: true }, `常见观察句式（${node.patterns.length}，有证据 ${node.patterns.filter((item) => item && item.verified).length}）`),
+              node.patterns.map((pattern, index) => {
+                const text = typeof pattern === 'string' ? pattern : pattern.text || ''
+                const names = ((pattern && pattern.examples) || []).map((example) => example.title).filter(Boolean)
+                return h(
                   'div',
-                  { key: index, style: { fontSize: 12, color: C.muted, lineHeight: 1.75, padding: '4px 0' } },
-                  `· ${pattern}`,
-                ),
-              ),
+                  { key: index, style: { fontSize: 12, color: pattern && pattern.verified ? C.text : C.muted, lineHeight: 1.75, padding: '4px 0' } },
+                  `${pattern && pattern.verified ? '·' : '·[未验证]'} ${text}${names.length ? h('span', { style: { color: C.muted, fontSize: 11 } }, `　例：${names.slice(0, 3).join('、')}`) : null}`,
+                )
+              }),
             )
           : null,
         h(
