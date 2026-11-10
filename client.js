@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.8'
+    const CLIENT_BUILD = '1.3.9'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -3094,7 +3094,7 @@ window.__ModuleLoader__.load({
           Card,
           null,
           h(SectionTitle, null, '新题方向定向'),
-          h('div', { style: { fontSize: 12, color: C.muted, marginBottom: 8 } }, '选一道没做过的新题，写下 1–2 句方向；提交后把同一段思路发到对话里，我对照真值判命中。'),
+          h('div', { style: { fontSize: 12, color: C.muted, marginBottom: 8 } }, '选一道没做过的新题，写下 1–2 句方向；提交后在下方直接给出判定，两轮不中再公布真值。'),
           quizList.length
             ? h(
                 'div',
@@ -3114,6 +3114,12 @@ window.__ModuleLoader__.load({
                       `${item.title || item.key}${item.rating ? ` · ${item.rating}` : ''}`,
                     ),
                   ),
+                  h('div', { style: { flex: 1 } }),
+                  h(
+                    Btn,
+                    { onClick: nextBatch, style: { fontSize: 11.5 }, title: '从池子里换一批（会整体替换上面三道）' },
+                    '换一批',
+                  ),
                 ),
                 quizItem
                   ? h(
@@ -3121,8 +3127,6 @@ window.__ModuleLoader__.load({
                       { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
                       h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
                         h('span', { style: { fontSize: 11.5, color: C.muted } }, `已开题 · 用时 ${fmt(now - quizStartedAt)}${quizAttempts.length ? ` · 已提交 ${quizAttempts.length} 轮` : ''}`),
-                        h('div', { style: { flex: 1 } }),
-                        h(Btn, { onClick: nextBatch, style: { fontSize: 11.5 } }, '换一批'),
                       ),
                       h('div', { style: { maxHeight: 260, overflow: 'auto', fontSize: 12.5, lineHeight: 1.75, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10 } }, h(RichLines, { text: quizItem.statementZh || quizItem.statement || '（这道题没有题面）' })),
                       h('textarea', {
