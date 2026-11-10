@@ -1047,6 +1047,10 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function problemTitle(item) {
+      return (item && (item.titleZh || item.title)) || ''
+    }
+
     function splitTags(text) {
       return String(text || '')
         .split(/[,，、\s]+/)
@@ -1204,7 +1208,7 @@ window.__ModuleLoader__.load({
                   rel: 'noreferrer',
                   style: { fontSize: 14, fontWeight: 600, color: C.text, textDecoration: 'none' },
                 },
-                `${item.title}（${item.key}）`,
+                `${item.titleZh || item.title}（${item.key}）`,
               ),
               h(
                 'div',
@@ -1807,7 +1811,7 @@ window.__ModuleLoader__.load({
                         onClick: () => openProblem(hit.problem.id),
                         style: { fontSize: 12.5, color: C.text, flex: 1, cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3 },
                       },
-                      `${hit.problem.title}（${hit.problem.key}${hit.problem.rating ? `，${hit.problem.rating}` : ''}）`,
+                      `${problemTitle(hit.problem)}（${hit.problem.key}${hit.problem.rating ? `，${hit.problem.rating}` : ''}）`,
                     ),
                     hit.key ? h(Pill, { color: C.brand }, '精髓') : null,
                     h(Pill, { color: hit.direct ? C.muted : C.border }, hit.direct ? '本节点' : '子方向'),
@@ -2459,7 +2463,7 @@ window.__ModuleLoader__.load({
                         onClick: () => openProblem(problem.id),
                         style: { fontSize: 12.5, color: C.text, flex: 1, cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3 },
                       },
-                      `${problem.title}（${problem.key}${problem.rating ? ` · ${problem.rating}` : ''}）`,
+                      `${problemTitle(problem)}（${problem.key}${problem.rating ? ` · ${problem.rating}` : ''}）`,
                     ),
                       h(Pill, { color: direct ? C.muted : C.border }, direct ? '本节点' : '子节点'),
                   ),
@@ -2501,7 +2505,7 @@ window.__ModuleLoader__.load({
         const list = state.problems.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
         if (!word) return list
         return list.filter((problem) =>
-          `${problem.title} ${problem.key} ${problem.platform} ${(problem.tags || []).join(' ')} ${(problem.nodePaths || []).join(' ')}`
+          `${problem.title} ${problem.titleZh || ''} ${problem.key} ${problem.platform} ${(problem.tags || []).join(' ')} ${(problem.nodePaths || []).join(' ')}`
             .toLowerCase()
             .includes(word),
         )
@@ -2570,7 +2574,7 @@ window.__ModuleLoader__.load({
                   h(
                     'div',
                     { style: { display: 'flex', gap: 6, alignItems: 'baseline' } },
-                    h('span', { style: { fontSize: 12.5, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, problem.title),
+                    h('span', { style: { fontSize: 12.5, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, problemTitle(problem)),
                     problem.rating ? h('span', { style: { fontSize: 11, color: C.muted, flex: 'none' } }, problem.rating) : null,
                   ),
                   h(
@@ -2802,7 +2806,7 @@ window.__ModuleLoader__.load({
                 rel: 'noreferrer',
                 style: { color: C.text, textDecoration: 'none', fontSize: 14.5, fontWeight: 600, flex: 1, minWidth: 120 },
               },
-              entity.title,
+              entity.titleZh || entity.title,
             ),
             h(Pill, null, `${entity.platform === 'codeforces' ? 'CF' : entity.platform === 'atcoder' ? 'AT' : 'LG'} ${entity.key}`),
             entity.rating ? h(Pill, null, `${entity.rating}`) : null,
@@ -2831,7 +2835,7 @@ window.__ModuleLoader__.load({
               tone: 'danger',
               disabled: busy,
               onClick: () => {
-                if (typeof window !== 'undefined' && !window.confirm(`删除《${entity.title}》？题目和它的洞察都会从库里去掉。`)) return
+                if (typeof window !== 'undefined' && !window.confirm(`删除《${entity.titleZh || entity.title}》？题目和它的洞察都会从库里去掉。`)) return
                 call('removeProblem', { problem: problem.id })
               },
             }, '删除'),
@@ -2924,7 +2928,7 @@ window.__ModuleLoader__.load({
                 onChange: (e) => setEssence(e.target.value),
                 style: sx(textareaStyle, { minHeight: 52 }),
               }),
-              h(SectionTitle, null, '题面'),
+              h(SectionTitle, null, '英文题面（编辑用）'),
               h('textarea', { value: statement, onChange: (e) => setStatement(e.target.value), style: sx(textareaStyle, { minHeight: 90 }) }),
               h(SectionTitle, null, '题解 / 做法'),
               h('textarea', { value: solution, onChange: (e) => setSolution(e.target.value), style: sx(textareaStyle, { minHeight: 110 }) }),
@@ -2936,16 +2940,16 @@ window.__ModuleLoader__.load({
               ),
             )
           : null,
-        !editingBody && (entity.statement || entity.solution)
+        !editingBody && (entity.statementZh || entity.solution)
           ? h(
               Card,
               null,
-              entity.statement
+              entity.statementZh
                 ? h(
                     'div',
                     null,
                     h(SectionTitle, { first: true }, '题意'),
-                    h('div', { style: { fontSize: 12.5, lineHeight: 1.75, whiteSpace: 'pre-wrap' } }, h(MathText, { text: entity.statement })),
+                    h('div', { style: { fontSize: 12.5, lineHeight: 1.75, whiteSpace: 'pre-wrap' } }, h(RichLines, { text: entity.statementZh })),
                   )
                 : null,
               entity.solution
@@ -3304,18 +3308,15 @@ window.__ModuleLoader__.load({
                         h('span', { style: { fontSize: 11.5, color: C.muted } }, `已开题 · 用时 ${fmt(now - quizStartedAt)}${quizAttempts.length ? ` · 已提交 ${quizAttempts.length} 轮` : ''} · ${quizItem.titleZh || quizItem.title}`),
                       ),
                       quizItem.statementZh
-                        ? null
-                        : h('div', { style: { fontSize: 11.5, color: C.muted, marginBottom: 4 } }, '（新抽的题暂无中文题意，下面是英文原文）'),
-                      h('div', { style: { maxHeight: 260, overflow: 'auto', fontSize: 12.5, lineHeight: 1.75, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10 } },
-                        quizItem.statementZh || quizItem.statement
-                          ? h(RichLines, { text: quizItem.statementZh || quizItem.statement })
-                          : h('div', { style: { color: C.muted } },
-                              '这道题暂时没抓到题面。',
-                              quizItem.url
-                                ? h('a', { href: quizItem.url, target: '_blank', rel: 'noreferrer', style: { color: C.brand, marginLeft: 6 } }, '在来源站点打开原题')
-                                : null,
-                            ),
-                      ),
+                        ? h('div', { style: { maxHeight: 260, overflow: 'auto', fontSize: 12.5, lineHeight: 1.75, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10 } },
+                            h(RichLines, { text: quizItem.statementZh }),
+                          )
+                        : h('div', { style: { fontSize: 12, color: C.muted, border: `1px dashed ${C.border}`, borderRadius: 8, padding: 10 } },
+                            '这道题的中文题意还在整理中，先别急着做。',
+                            quizItem.url
+                              ? h('a', { href: quizItem.url, target: '_blank', rel: 'noreferrer', style: { color: C.brand, marginLeft: 6 } }, '在来源站点打开原题')
+                              : null,
+                          ),
                       h('textarea', {
                         value: draft,
                         onChange: (event) => setDraft(event.target.value),
@@ -3617,7 +3618,7 @@ window.__ModuleLoader__.load({
                       h(
                         'a',
                         { href: problem.url, target: '_blank', rel: 'noreferrer', style: { flex: 1, fontSize: 12.5, color: C.text, textDecoration: 'none' } },
-                        `${problem.title}（${problem.key}${problem.rating ? `，${problem.rating}` : ''}）`,
+                        `${problemTitle(problem)}（${problem.key}${problem.rating ? `，${problem.rating}` : ''}）`,
                       ),
                       h('span', { style: { fontSize: 11, color: row.recommended ? C.brand : C.muted } }, `${Math.round(row.minSimilarity * 100)}%`),
                     ),
@@ -3625,7 +3626,7 @@ window.__ModuleLoader__.load({
                     h(
                       'div',
                       { style: { fontSize: 11, color: C.muted, lineHeight: 1.6 } },
-                      row.nearest ? `最像《${row.nearest.title}》` : '库里没有可比对象',
+                      row.nearest ? `最像《${problemTitle(row.nearest)}》` : '库里没有可比对象',
                       row.shared && row.shared.obs && row.shared.obs.length
                         ? `；共同观察：${row.shared.obs.slice(0, 2).join('、')}`
                         : '；精髓观察完全不重叠',
@@ -3669,7 +3670,7 @@ window.__ModuleLoader__.load({
                 h(
                   'div',
                   { key: problem.id, style: { display: 'flex', gap: 8, padding: '3px 0', fontSize: 12 } },
-                  h('span', { style: { flex: 1 } }, problem.title),
+                  h('span', { style: { flex: 1 } }, problemTitle(problem)),
                   h('span', { style: { color: C.muted } }, `${problem.platform} ${problem.key}`),
                 ),
               )
