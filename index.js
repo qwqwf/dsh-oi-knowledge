@@ -787,10 +787,21 @@ export function apply(ctx, config = {}) {
       }
     }
 
-    async function translateByModel(text) {
+    // 题面只留「任务描述」，约束/输入输出/样例交给题意改写时丢掉。
+    function trimForBrief(text) {
+      let out = String(text || '').replace(/\r/g, '')
+      out = out.replace(/^Score\s*:?[^\n]*\n+/i, '')
+      const cut = out.search(/(^|\n)\s*(Constraints?|Input|Output|Sample Input|Sample Output|Examples?|Note|Scoring)\b/i)
+      if (cut > 80) out = out.slice(0, cut)
+      return out.trim()
+    }
+
+    async function translateByModel(text, options = {}) {
       const { provider, model } = modelOf()
       if (!provider || !model) return ''
-      const source = String(text || '').slice(0, 9000)
+      const raw = String(text || '')
+      const piece0 = options.mode === 'statement' ? trimForBrief(raw) : raw
+      const source = piece0.slice(0, 9000)
       if (!source.trim()) return ''
       const pieces = []
       for (let i = 0; i < source.length; i += 1500) pieces.push(source.slice(i, i + 1500))
@@ -803,10 +814,12 @@ export function apply(ctx, config = {}) {
             provider,
             model,
             system:
-              '你是算法竞赛题面的翻译器。把用户给的英文片段译成简体中文；数学记号保持 LaTeX 原样并用 $...$ 包住；不要解释、不要加标题、不要输出代码块。',
+              options.mode === 'statement'
+                ? '你是算法竞赛题面的中文改写器。把用户给的英文题面概括成 2–5 句简体中文题意：只讲任务与关键设定，不要输入/输出格式、不要约束列表、不要样例、不要「得分」等信息；数学记号保持 LaTeX 原样并用 $...$ 包住；总字数不超过 220；不要标题、不要解释、不要代码块。'
+                : '你是算法竞赛题面的翻译器。把用户给的英文片段译成简体中文；数学记号保持 LaTeX 原样并用 $...$ 包住；不要解释、不要加标题、不要输出代码块。',
             messages: [{ role: 'user', content: [{ type: 'text', text: piece }] }],
             temperature: 0.1,
-            maxTokens: 2200,
+            maxTokens: 900,
             signal,
           })
           for await (const chunk of stream) {
@@ -821,7 +834,7 @@ export function apply(ctx, config = {}) {
       return done.join('\n')
     }
 
-    llmImpl = async (text) => translateByModel(text)
+    llmImpl = async (text, options) => translateByModel(text, options)
 
     setHostTranslateProbe(async (text) => {
       if (translatorImpl) {
@@ -849,8 +862,8 @@ export function apply(ctx, config = {}) {
       if (value && /[\u4e00-\u9fff]/.test(value)) return value
     }
     if (llmImpl) {
-      const value = await llmImpl(text)
-      if (value) return value
+      const value = await llmImpl(text, options)
+      if (value && /[\u4e00-\u9fff]/.test(value)) return value
     }
     return ''
   })
