@@ -57,7 +57,7 @@ function registerTools(ctx, service) {
         '  report — 总览 + 最该补的知识点 + 思路树空白方向（limit）；',
         '  gaps — 按 tag 统计「从未通过」的盲区；',
         '  recommend — 按弱点从 Codeforces 题库推题（node/tag/ratingMin/ratingMax/limit）；',
-        '  weak — 面板「薄弱题」同款：从 AtCoder 题库随机抽几道新题，按题面/题解关键词挑出最戳弱点的一道；',
+        '  weak — 面板「薄弱题」同款：从 AtCoder 与 Codeforces 题库混合随机抽几道新题，按标签/题面关键词挑出最戳弱点的一道；',
         '  similar — 比两题的「想法」相似度（a + b），或单题找库内最像的（a），或一批候选排序（candidates）；只比观察/洞察/算法节点，不比题面文字；',
         '  novel — 反套路推荐：候选里挑与库内最不像的（candidates 或最近消化的题，threshold 默认 0.3）；',
         '  obs_tree — 打印观察树（精髓观察的层级结构）及每个节点上的观察数；',

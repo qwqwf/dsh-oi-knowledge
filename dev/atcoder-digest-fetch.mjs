@@ -121,9 +121,13 @@ async function loadResources(force = false) {
       id: item.id,
       contest: item.contest_id,
       title: item.title,
-      difficulty: Number.isFinite(Number(models[item.id]?.difficulty))
-        ? Math.round(Number(models[item.id].difficulty) / 100) * 100
-        : null,
+      // kenkoooo 的 difficulty 对「难度未定」的题会给负数哨兵（如 -1000），
+      // 那不是真实难度，按未知处理（null）。
+      difficulty: (() => {
+        const raw = Number(models[item.id]?.difficulty)
+        if (!Number.isFinite(raw) || raw < 1) return null
+        return Math.round(raw / 100) * 100
+      })(),
     })),
   }
   fs.writeFileSync(RESOURCE_CACHE, JSON.stringify(payload), 'utf8')
