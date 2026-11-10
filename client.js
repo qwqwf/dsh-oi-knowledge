@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.9'
+    const CLIENT_BUILD = '1.3.11'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -119,7 +119,7 @@ window.__ModuleLoader__.load({
         '.oi-card:hover{border-color:var(--dsw-alias-border-l2)}',
         '.oi-code{display:block;margin:6px 0;padding:8px 10px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:7px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.55;white-space:pre;overflow-x:auto}',
         '.oi-code-inline{display:inline;padding:1px 5px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:5px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em;white-space:nowrap}',
-        '.oi-katex{display:inline-block;max-width:100%;margin:0 1px;vertical-align:-.06em}',
+        '.oi-katex{display:inline-block;max-width:100%;margin:0 .16em;vertical-align:-.05em}',
         '.oi-katex-display{display:block;margin:6px 0;overflow-x:auto;overflow-y:hidden}',
       ].join('\n')
       document.head.appendChild(style)
@@ -254,6 +254,32 @@ window.__ModuleLoader__.load({
         if (typeof localStorage !== 'undefined') localStorage.removeItem(WEAK_SEEN_STORAGE)
       } catch (_) {}
       return []
+    }
+
+    // 新题批次的「最近出现过」记录：每换一批就把新三题记进来，
+    // 下次优先从没出现过的题里随机，池子不够时才允许重复。
+    const QUIZ_RECENT_STORAGE = 'oi-knowledge:quiz-recent'
+    function quizRecentList() {
+      try {
+        if (typeof localStorage === 'undefined') return []
+        const parsed = JSON.parse(localStorage.getItem(QUIZ_RECENT_STORAGE) || '[]')
+        return Array.isArray(parsed) ? parsed.map(String) : []
+      } catch (_) {
+        return []
+      }
+    }
+    function rememberQuizRecent(keys) {
+      const fresh = keys.map(String)
+      const next = fresh.concat(quizRecentList().filter((entry) => !fresh.includes(entry))).slice(0, 60)
+      try {
+        if (typeof localStorage !== 'undefined') localStorage.setItem(QUIZ_RECENT_STORAGE, JSON.stringify(next))
+      } catch (_) {}
+      return next
+    }
+    function clearQuizRecent() {
+      try {
+        if (typeof localStorage !== 'undefined') localStorage.removeItem(QUIZ_RECENT_STORAGE)
+      } catch (_) {}
     }
 
     // ── 轻量 LaTeX：$…$ / $$…$$ / \(…\) / \[…\] 转 React 节点 ─────────────
@@ -2982,18 +3008,28 @@ window.__ModuleLoader__.load({
 
       const [quizKeys, setQuizKeys] = React.useState([])
 
+      const pickBatch = () => {
+        if (!quizList.length) return []
+        const recent = quizRecentList()
+        const unseen = quizList.filter((item) => !recent.includes(item.key))
+        if (unseen.length < 3) clearQuizRecent()
+        const pool = unseen.length >= 3 ? unseen : quizList
+        const shuffled = pool.slice().sort(() => Math.random() - 0.5).slice(0, 3)
+        rememberQuizRecent(shuffled.map((item) => item.key))
+        return shuffled.map((item) => item.key)
+      }
+
       React.useEffect(() => {
-        if (!quizKeys.length && quizList.length) setQuizKeys(quizList.slice(0, 3).map((item) => item.key))
+        if (!quizKeys.length && quizList.length) setQuizKeys(pickBatch())
       }, [quizList.length])
 
       const quizBatch = quizKeys.map((key) => quizList.find((item) => item.key === key)).filter(Boolean)
 
       const nextBatch = () => {
         if (!quizList.length) return
-        const others = quizList.filter((item) => !quizKeys.includes(item.key))
-        const pool = others.length >= 3 ? others : quizList
-        const shuffled = pool.slice().sort(() => Math.random() - 0.5).slice(0, 3)
-        setQuizKeys(shuffled.map((item) => item.key))
+        const keys = pickBatch()
+        if (!keys.length) return
+        setQuizKeys(keys)
         setQuizKey('')
         setDraft('')
         setQuizFeedback(null)
