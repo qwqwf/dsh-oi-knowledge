@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.20'
+    const CLIENT_BUILD = '1.3.22'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -3048,7 +3048,18 @@ window.__ModuleLoader__.load({
       const [quizFeedback, setQuizFeedback] = React.useState(null)
       const [quizRevealed, setQuizRevealed] = React.useState(false)
       const [submitting, setSubmitting] = React.useState(false)
+      const [repairing, setRepairing] = React.useState(false)
       const [now, setNow] = React.useState(Date.now())
+
+      const repairZh = async () => {
+        if (repairing) return
+        setRepairing(true)
+        try {
+          await call('repairQuiz', {})
+        } finally {
+          setRepairing(false)
+        }
+      }
 
       const [session, setSession] = React.useState(sessions.length ? sessions[sessions.length - 1] : null)
       const [sessionKeys, setSessionKeys] = React.useState('')
@@ -3312,9 +3323,14 @@ window.__ModuleLoader__.load({
                             h(RichLines, { text: quizItem.statementZh }),
                           )
                         : h('div', { style: { fontSize: 12, color: C.muted, border: `1px dashed ${C.border}`, borderRadius: 8, padding: 10 } },
-                            '这道题的中文题意还在整理中，先别急着做。',
+                            '这道题的中文题意还没整理好。',
+                            h(Btn, {
+                              onClick: repairZh,
+                              disabled: repairing,
+                              style: { marginLeft: 8, fontSize: 11.5 },
+                            }, repairing ? '整理中…' : '立即整理中文题意'),
                             quizItem.url
-                              ? h('a', { href: quizItem.url, target: '_blank', rel: 'noreferrer', style: { color: C.brand, marginLeft: 6 } }, '在来源站点打开原题')
+                              ? h('a', { href: quizItem.url, target: '_blank', rel: 'noreferrer', style: { color: C.brand, marginLeft: 8 } }, '在来源站点打开原题')
                               : null,
                           ),
                       h('textarea', {
