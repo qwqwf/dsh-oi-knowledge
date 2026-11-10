@@ -30,7 +30,8 @@ function check(name, ok, extra = '') {
   check('reparent: 删除节点引用被清', !problem.nodes.includes('x') && !problem.insights[0].nodes.includes('x'))
   check('reparent: 保留子节点引用仍在', problem.nodes.includes('c1') && problem.nodes.includes('c2'))
   check('reparent: tagMap 只清被删节点', !('t1' in kb.meta.tagMap) && kb.meta.tagMap.t2 === 'c1')
-  check('reparent: removed=1 / reparented=2', res.removed === 1 && res.reparented === 2, JSON.stringify(res))
+  // 只有直接子节点改挂；更深的后代仍挂在各自父节点下。
+  check('reparent: removed=1 / reparented=1', res.removed === 1 && res.reparented === 1, JSON.stringify(res))
 }
 
 // ── F-01 subtree ───────────────────────────────────────────────────────────
@@ -103,7 +104,7 @@ function check(name, ok, extra = '') {
     }
   })
   const service = new KnowledgeService(store)
-  check('账号题量: 本平台 + 镜像分开计', service.listAccounts().summary.includes('已同步 1 题（含 3 道镜像题）'))
+  check('账号题量: 本平台 + 镜像分开计', service.listAccounts().summary.includes('已同步 4 题（自有 1 + 镜像 3）'))
   service.removeAccount({ platform: 'luogu', handle: 'v' })
   const left = store.load()
   check(

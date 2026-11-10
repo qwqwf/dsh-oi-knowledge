@@ -597,7 +597,7 @@ window.__ModuleLoader__.load({
     function isMathToken(token) {
       if (!token) return false
       if (/[\\_^]/.test(token)) return true
-      if (/^[A-Za-z]$/.test(token)) return !/^[a]$/.test(token)
+      if (/^[A-Za-z]$/.test(token)) return !/^(a|I)$/.test(token)
       if (/^\d+([.,]\d+)?[)\],.;:]*$/.test(token)) return true
       if (/^[A-Za-z][A-Za-z0-9]*\($/.test(token) || /^\)$/.test(token)) return true
       if (/^[^A-Za-z0-9]+$/.test(token)) return true
@@ -1138,6 +1138,7 @@ window.__ModuleLoader__.load({
       const { call } = useStore()
       const [result, setResult] = React.useState(props.result)
       const [loading, setLoading] = React.useState(false)
+      const [error, setError] = React.useState('')
       const [seen, setSeen] = React.useState(weakSeenList())
       const preparing = !result || result.preparing === true
       const item = result ? result.item : null
@@ -1145,15 +1146,24 @@ window.__ModuleLoader__.load({
 
       const load = async (exclude) => {
         setLoading(true)
+        setError('')
         try {
           let next = await call('weakProblem', { exclude }, { silent: true })
-          if (!next || !next.item) {
-            // 一轮都换完了：清空记录，从第一道重新开始。
+          if (!next) {
+            setError('没取到推荐（服务端或网络错误），稍后重试。')
+            return
+          }
+          if (!next.item && !next.preparing) {
+            // 一轮真的换完了才清空记录，重新从第一道开始；请求失败不算。
             forgetWeakSeen()
             next = await call('weakProblem', {}, { silent: true })
+            if (!next) {
+              setError('没取到推荐（服务端或网络错误），稍后重试。')
+              return
+            }
           }
-          if (next && next.item) setSeen(rememberWeakSeen(next.item.key))
-          if (next) setResult(next)
+          if (next.item) setSeen(rememberWeakSeen(next.item.key))
+          setResult(next)
         } finally {
           setLoading(false)
         }
@@ -1179,6 +1189,15 @@ window.__ModuleLoader__.load({
               null,
               h(SectionTitle, { first: true }, '正在为您准备题目'),
               h('div', { style: { fontSize: 12.5, color: C.muted, lineHeight: 1.8 } }, '正在从 AtCoder / Codeforces 题库随机抽题，抓题面/翻译后判断它属于哪个知识点，请稍候…'),
+            )
+          : null,
+        error
+          ? h(
+              Card,
+              null,
+              h(SectionTitle, { first: true }, '这次没拿到推荐'),
+              h('div', { style: { fontSize: 12.5, color: C.muted, lineHeight: 1.8 } }, error),
+              h('div', { style: { marginTop: 10 } }, h(Btn, { tone: 'primary', onClick: () => load(seen) }, '重试')),
             )
           : null,
         weak
@@ -2753,7 +2772,6 @@ window.__ModuleLoader__.load({
           })
           .catch((error) => {
             if (cancelled) return
-            setDetail(null)
             setDetailError(error && error.message ? error.message : '题目详情读取失败')
           })
           .finally(() => {
@@ -2774,7 +2792,19 @@ window.__ModuleLoader__.load({
       }
 
       const saveBody = async () => {
-        const result = await call('updateProblem', { problem: problem.id, essence, statement, solution })
+        if (!detail) {
+          setDetailError('题面还没读出来，先点右上角「重试」再保存')
+          return
+        }
+        const patch = { problem: problem.id }
+        if (essence !== (detail.essence || '')) patch.essence = essence
+        if (statement !== (detail.statement || '')) patch.statement = statement
+        if (solution !== (detail.solution || '')) patch.solution = solution
+        if (Object.keys(patch).length === 1) {
+          setEditingBody(false)
+          return
+        }
+        const result = await call('updateProblem', patch)
         if (result) {
           setEditingBody(false)
           setTick((value) => value + 1)
@@ -2830,20 +2860,21 @@ window.__ModuleLoader__.load({
                 if (result) setTick((value) => value + 1)
               },
             }, '重新分类'),
-            h(Btn, { onClick: () => setEditingBody((value) => !value) }, editingBody ? '收起题面' : '编辑题面/题解'),
+            h(Btn, { disabled: !detail || busy, onClick: () => setEditingBody((value) => !value) }, editingBody ? '收起题面' : '编辑题面/题解'),
             h(Btn, {
               tone: 'danger',
               disabled: busy,
-              onClick: () => {
+              onClick: async () => {
                 if (typeof window !== 'undefined' && !window.confirm(`删除《${entity.titleZh || entity.title}》？题目和它的洞察都会从库里去掉。`)) return
-                call('removeProblem', { problem: problem.id })
+                const result = await call('removeProblem', { problem: problem.id })
+                if (!result) return
               },
             }, '删除'),
           ),
           h(
             'div',
             { style: { display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' } },
-            h('span', { style: { fontSize: 11.5, color: C.textDim } }, '卡在哪一步'),
+            h('span', { style: { fontSize: 11.5, color: C.muted } }, '卡在哪一步'),
             STUCK_STAGES.map(([value, label, hint]) =>
               h(
                 Btn,
@@ -2956,7 +2987,7 @@ window.__ModuleLoader__.load({
                 ? h(
                     'div',
                     null,
-                    h(SectionTitle, { first: !entity.statement }, '题解 / 做法'),
+                    h(SectionTitle, { first: !entity.statementZh }, '题解 / 做法'),
                     h('div', { style: { fontSize: 12.5, lineHeight: 1.75, whiteSpace: 'pre-wrap' } }, h(MathText, { text: entity.solution })),
                   )
                 : null,
@@ -3185,13 +3216,21 @@ window.__ModuleLoader__.load({
         setSubmitting(true)
         const ms = quizStartedAt ? Date.now() - quizStartedAt : undefined
         try {
-          await call('trainAttempt', { problem: item.key, text, ms }, { silent: true })
+          const attempt = await call('trainAttempt', { problem: item.key, text, ms }, { silent: true })
+          if (!attempt) {
+            setQuizFeedback({ tone: 'warn', text: '这轮思路没存上（服务端/网络错误），文字还在输入框里，再提交一次。' })
+            return
+          }
           const judge = await call('trainJudge', { problem: item.key, text }, { silent: true })
+          if (!judge) {
+            setQuizFeedback({ tone: 'warn', text: '思路已记录，但判定没返回，稍等一下再提交一次。' })
+            return
+          }
           setQuizFeedback({
-            tone: judge && judge.hit ? 'success' : judge && judge.revealed ? 'warn' : 'idle',
-            text: (judge && judge.summary) || '已记录这轮思路。',
+            tone: judge.hit ? 'success' : judge.revealed ? 'warn' : 'idle',
+            text: judge.summary || '已记录这轮思路。',
           })
-          if (judge && judge.revealed) setQuizRevealed(true)
+          if (judge.revealed) setQuizRevealed(true)
           // 只清掉这次提交的文本；请求期间用户新打的字不动。
           setDraft((current) => (current.trim() === text ? '' : current))
         } finally {
@@ -3203,7 +3242,11 @@ window.__ModuleLoader__.load({
         const item = quizList.find((entry) => entry.key === quizKey)
         if (!item) return
         const result = await call('trainReveal', { problem: item.key }, { silent: true })
-        setQuizFeedback({ tone: 'idle', text: (result && result.summary) || '已公布真值。' })
+        if (!result) {
+          setQuizFeedback({ tone: 'warn', text: '真值没取回来（服务端/网络错误），稍后再点一次。' })
+          return
+        }
+        setQuizFeedback({ tone: 'idle', text: result.summary || '已公布真值。' })
         setQuizRevealed(true)
       }
 
@@ -3220,10 +3263,17 @@ window.__ModuleLoader__.load({
         }
       }
 
-      const touchProblem = async (key) => {
+      const touchProblem = (key) => {
+        const target = (state.problems || []).find((problem) => problem.key === key)
+        const url = target && target.url ? target.url : `https://atcoder.jp/tasks/${key}`
+        // 先开窗，避免 await 之后被浏览器当成弹窗拦截。
+        try {
+          window.open(url, '_blank', 'noopener')
+        } catch (_) {
+          /* 弹窗被拦时不影响计时 */
+        }
         if (!session) return
-        await call('sessionTouch', { session: session.id, problem: key }, { silent: true })
-        window.open(`https://atcoder.jp/tasks/${key}`, '_blank', 'noopener')
+        call('sessionTouch', { session: session.id, problem: key }, { silent: true })
       }
 
       const finishSession = async () => {
@@ -3446,7 +3496,7 @@ window.__ModuleLoader__.load({
       const stuckTop = STUCK_STAGES.map(([value, label]) => [label, stuck[value] || 0]).sort((a, b) => b[1] - a[1])[0]
 
       const cards = [
-        ['覆盖', `${overview.coveredPct}%`, `已触达 ${overview.covered}/${Math.max(0, overview.nodes - 1)} 个节点`],
+        ['覆盖', `${overview.coveredPct}%`, `已触达 ${overview.covered}/${overview.algoNonRoot ?? Math.max(0, overview.nodes - 1)} 个节点`],
         ['非常熟练', overview.expert, '◆ 稳定到能当工具用'],
         ['熟练', overview.strong, '● 基本稳，偶尔失手'],
         ['还行', overview.ok, '◐ 有基础但不够稳'],
@@ -3455,7 +3505,7 @@ window.__ModuleLoader__.load({
         ['空白', overview.blank, '○ 完全没碰过'],
         ['同步', overview.syncedSolved, '来自账号同步的已通过题'],
         ['手录', overview.manualProblems, `其中已通过 ${overview.manualSolved}`],
-        ['思路覆盖', `${overview.ideaNodes ? Math.round((overview.ideaCovered / Math.max(1, overview.ideaNodes - 1)) * 100) : 0}%`, `已沉淀 ${overview.ideaCovered}/${Math.max(0, overview.ideaNodes - 1)} 个思路`],
+        ['思路覆盖', `${overview.ideaNonRoot ? Math.round((overview.ideaCovered / overview.ideaNonRoot) * 100) : 0}%`, `已沉淀 ${overview.ideaCovered}/${overview.ideaNonRoot ?? 0} 个思路`],
         ['思路洞察', overview.ideaInsights, '挂在思路节点上的洞察'],
         ['观察树', `${overview.keyObservations || 0} 条`, `未归类 ${overview.obsUnassigned || 0} 条 / ${overview.obsNodes || 0} 节点`],
         ['卡点', stuckTotal || '—', stuckTotal ? `最多：${stuckTop[0]} ${stuckTop[1]}` : '还没记录卡点'],
