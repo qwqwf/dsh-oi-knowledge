@@ -272,7 +272,7 @@ check('state 里的问题节点不含 insights 原始数组', state.nodes.every(
 check('state 可 JSON 序列化', typeof JSON.stringify(state) === 'string')
 check('风险榜/思路榜已瘦身', (state.top || []).every((row) => row.insights === undefined))
 check('题目洞察只留展示字段', state.problems.every((problem) => (problem.insights || []).every((insight) =>
-  Object.keys(insight).every((key) => ['id', 'kind', 'text', 'nodes'].includes(key)),
+  Object.keys(insight).every((key) => ['id', 'kind', 'text', 'nodes', 'obsNodes', 'key'].includes(key)),
 )))
 check('overview 带观察统计', typeof state.overview.obsUnassigned === 'number' && typeof state.overview.keyObservations === 'number')
 

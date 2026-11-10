@@ -172,6 +172,8 @@ function registerTools(ctx, service) {
       name: 'oi_problem',
       description: [
         '录入/维护题目与题解洞察。核心不是记题号，而是把「这题最精髓的部分」拆出来：观察、套路、推导性通用思路、思考方向、坑点。',
+        '写 essence / 洞察 / 题面题解时，数学记号一律用 $…$ 包起来（如 $A_i$、$dp_{i,j}$、$O(N\\log N)$），面板 KaTeX 只渲染 $…$ 里的内容。',
+        '数组下标写成下标形式：用 $dp_{i,j}$，不要写 $dp[i][j]$；构造序列（如 1,2,1,2,…）用反引号包成代码。',
         'action 取值：',
         '  add — 录题：platform + key（CF 1879D / AtCoder abc300_f / 洛谷 P1234）或 url；强烈建议同时给 essence（一句话精髓）和 insights；',
         '  add_insight — 给已有题补一条洞察（problem + kind + text + nodes?）；kind 可用英文或中文（观察/套路/思路/思考方向/坑点），nodes 可挂算法节点或思路节点；',

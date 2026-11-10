@@ -1,10 +1,7 @@
 /**
- * dsh-oi-knowledge —— Web 面板
+ * dsh-oi-knowledge —?Web 面板
  *
- * 一个单文件 React 面板：知识树 / 题目 / 弱点 / 账号 四个 tab。
- * 数据全部走 Host 注册的 /plugins/dsh-oi-knowledge/api/* 路由，
- * 因此这里只依赖 react 与浏览器自身的 fetch。
- */
+ * 一个单文件 React 面板：知识树 / 题目 / 弱点 / 账号 四个 tab? * 数据全部?Host 注册?/plugins/dsh-oi-knowledge/api/* 路由? * 因此这里只依?react 与浏览器自身?fetch? */
 window.__ModuleLoader__.load({
   id: 'dsh-oi-knowledge',
   factory(require) {
@@ -13,6 +10,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
+    const CLIENT_BUILD = '1.2.5'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -93,9 +91,40 @@ window.__ModuleLoader__.load({
     }
     const LEVEL_GLYPH = { expert: '◆', strong: '●', ok: '◐', weak: '▲', poor: '▽', unknown: '○', unmeasured: '·' }
 
+    // 面板级细样式：hover/focus/滚动条这些内联样式写不了的，统一用主题 token 注入一次。
+    const STYLE_ID = 'dsh-oi-knowledge-styles'
+    function ensureStyles() {
+      if (typeof document === 'undefined') return
+      if (document.getElementById(STYLE_ID)) return
+      const style = document.createElement('style')
+      style.id = STYLE_ID
+      style.textContent = [
+        '.oi-btn{transition:filter .12s ease,transform .06s ease}',
+        '.oi-btn:hover:not(:disabled){filter:brightness(1.08)}',
+        '.oi-btn:active:not(:disabled){transform:translateY(1px)}',
+        '.oi-btn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}',
+        '.oi-row{transition:background .12s ease}',
+        '.oi-row:hover{background:var(--dsw-alias-bg-layer-2)}',
+        '.oi-link:hover{color:var(--dsw-alias-brand-primary)}',
+        '.oi-tab{transition:color .12s ease}',
+        '.oi-tab:hover{color:var(--dsw-alias-label-primary)}',
+        '.oi-scroll{scrollbar-width:thin;scrollbar-color:var(--dsw-alias-border-l2) transparent}',
+        '.oi-scroll::-webkit-scrollbar{width:8px;height:8px}',
+        '.oi-scroll::-webkit-scrollbar-thumb{background:var(--dsw-alias-border-l2);border-radius:999px}',
+        '.oi-scroll::-webkit-scrollbar-track{background:transparent}',
+        '.oi-card{transition:border-color .12s ease}',
+        '.oi-card:hover{border-color:var(--dsw-alias-border-l2)}',
+        '.oi-code{display:block;margin:6px 0;padding:8px 10px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:7px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.55;white-space:pre;overflow-x:auto}',
+        '.oi-code-inline{display:inline;padding:1px 5px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:5px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em;white-space:nowrap}',
+        '.oi-katex{display:inline-block;max-width:100%;margin:0 1px;vertical-align:-.06em}',
+        '.oi-katex-display{display:block;margin:6px 0;overflow-x:auto;overflow-y:hidden}',
+      ].join('\n')
+      document.head.appendChild(style)
+    }
+
     const sx = (...parts) => Object.assign({}, ...parts.filter(Boolean))
 
-    // ── Host 路由解析：相对页面 base 解析，兼容反代前缀 ──────────────────
+    // ── Host 路由解析：相对页?base 解析，兼容反代前缀 ──────────────────
     function directoryBase() {
       const raw =
         typeof document !== 'undefined' && typeof document.baseURI === 'string' && document.baseURI !== ''
@@ -112,7 +141,7 @@ window.__ModuleLoader__.load({
       return new URL(API_PATH + String(path).replace(/^\/+/, ''), directoryBase())
     }
 
-    // 面板级记忆：薄弱题推荐过的题号。存在 localStorage 里，
+    // 面板级记忆：薄弱题推荐过的题号。存?localStorage 里，
     // 「换一道」「关掉浮层再点」甚至刷新页面之后都不会又从第一道开始。
     const WEAK_SEEN_STORAGE = 'oi-knowledge:weak-seen'
     function weakSeenList() {
@@ -140,21 +169,14 @@ window.__ModuleLoader__.load({
       return []
     }
 
-    // ── 轻量 LaTeX：$…$ / $$…$$ / \(…\) / \[…\] → React 节点 ─────────────
-    // 客户端没有 KaTeX（Builtin 只有 ctx/React/host/styles/console），
+    // ── 轻量 LaTeX?? / $$?$ / \(…\) / \[…\] ?React 节点 ─────────────
+    // 客户端没?KaTeX（Builtin 只有 ctx/React/host/styles/console），
     // 这里做一个够用的行内渲染：符号表 + 上下标 + 分式 + 根号 + 重音。
     const MATH_SYMBOLS = {
-      alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε', varepsilon: 'ε',
-      zeta: 'ζ', eta: 'η', theta: 'θ', vartheta: 'ϑ', iota: 'ι', kappa: 'κ',
-      lambda: 'λ', mu: 'μ', nu: 'ν', xi: 'ξ', omicron: 'ο', pi: 'π', varpi: 'ϖ',
-      rho: 'ρ', varrho: 'ϱ', sigma: 'σ', varsigma: 'ς', tau: 'τ', upsilon: 'υ',
-      phi: 'φ', varphi: 'ϕ', chi: 'χ', psi: 'ψ', omega: 'ω',
-      Gamma: 'Γ', Delta: 'Δ', Theta: 'Θ', Lambda: 'Λ', Xi: 'Ξ', Pi: 'Π',
-      Sigma: 'Σ', Upsilon: 'Υ', Phi: 'Φ', Psi: 'Ψ', Omega: 'Ω',
       le: '≤', leq: '≤', ge: '≥', geq: '≥', ne: '≠', neq: '≠', approx: '≈',
       simeq: '≃', sim: '∼', equiv: '≡', propto: '∝', ll: '≪', gg: '≫',
       times: '×', cdot: '·', div: '÷', pm: '±', mp: '∓', ast: '∗', star: '⋆',
-      circ: '∘', bullet: '•', oplus: '⊕', ominus: '⊖', otimes: '⊗', odot: '⊙',
+      circ: '∘', bullet: '∙', oplus: '⊕', ominus: '⊖', otimes: '⊗', odot: '⊙',
       cup: '∪', cap: '∩', setminus: '∖', subset: '⊂', subseteq: '⊆',
       supset: '⊃', supseteq: '⊇', in: '∈', notin: '∉', ni: '∋',
       emptyset: '∅', varnothing: '∅', forall: '∀', exists: '∃', nexists: '∄',
@@ -170,13 +192,7 @@ window.__ModuleLoader__.load({
       cdots: '⋯', vdots: '⋮', ddots: '⋱', prime: '′', degree: '°', hbar: 'ℏ',
       ell: 'ℓ', Re: 'ℜ', Im: 'ℑ', aleph: 'ℵ', top: '⊤', bot: '⊥',
       models: '⊨', vdash: '⊢', therefore: '∴', because: '∵', colon: ':',
-      nleq: '≰', ngeq: '≱', nless: '≮', ngtr: '≯', lnot: '¬', lor_: '∨',
-      log: 'log', ln: 'ln', exp: 'exp', sin: 'sin', cos: 'cos', tan: 'tan',
-      cot: 'cot', arcsin: 'arcsin', arccos: 'arccos', arctan: 'arctan',
-      sinh: 'sinh', cosh: 'cosh', tanh: 'tanh', gcd: 'gcd', lcm: 'lcm',
-      min: 'min', max: 'max', arg: 'arg', lim: 'lim', limsup: 'lim sup',
-      liminf: 'lim inf', det: 'det', deg: 'deg', dim: 'dim', ker: 'ker',
-      mod: ' mod ', bmod: ' mod ',
+      nleq: '≰', ngeq: '≱', nless: '≮', ngtr: '≯', lnot: '¬',
     }
 
     const BLACKBOARD_LETTERS = {
@@ -272,7 +288,7 @@ window.__ModuleLoader__.load({
               h(
                 'span',
                 { key: `sqrt${i}` },
-                '√',
+                'span',
                 h('span', { style: { borderTop: `1px solid ${C.text}`, paddingLeft: 2, marginLeft: 1 } }, ...mathTokens(inner.raw)),
               ),
             )
@@ -379,10 +395,15 @@ window.__ModuleLoader__.load({
     const BS = String.fromCharCode(92)
 
     function splitMathSegments(text) {
-      const source = String(text == null ? '' : text)
+      const source = autoMathify(String(text == null ? '' : text))
       const segments = []
       if (!source) return segments
-      if (source.indexOf('$') < 0 && source.indexOf(BS + '(') < 0 && source.indexOf(BS + '[') < 0) {
+      if (
+        source.indexOf('$') < 0 &&
+        source.indexOf(BS + '(') < 0 &&
+        source.indexOf(BS + '[') < 0 &&
+        source.indexOf('`') < 0
+      ) {
         segments.push({ type: 'text', value: source })
         return segments
       }
@@ -392,6 +413,25 @@ window.__ModuleLoader__.load({
         if (end > textStart) segments.push({ type: 'text', value: source.slice(textStart, end) })
       }
       while (i < source.length) {
+        if (source.startsWith('```', i)) {
+          const end = source.indexOf('```', i + 3)
+          if (end < 0) { i += 3; continue }
+          pushText(i)
+          const body = source.slice(i + 3, end).replace(/^\n/, '').replace(/\n$/, '')
+          segments.push({ type: 'code', value: body, block: true })
+          i = end + 3
+          textStart = i
+          continue
+        }
+        if (source[i] === '`') {
+          const end = source.indexOf('`', i + 1)
+          if (end < 0 || end === i + 1) { i += 1; continue }
+          pushText(i)
+          segments.push({ type: 'code', value: source.slice(i + 1, end), block: false })
+          i = end + 1
+          textStart = i
+          continue
+        }
         if (source.startsWith('$$', i)) {
           const end = source.indexOf('$$', i + 2)
           if (end < 0) { i += 2; continue }
@@ -434,10 +474,69 @@ window.__ModuleLoader__.load({
       return segments
     }
 
-    // 纯 JS 兜底渲染（KaTeX 尚未加载或加载失败时使用）
+    // 显示层兜底：把正文里裸露的数学片段（dp[i][j]、A_i、2N、x+y≤K…）自动包成 $…$。
+    // 这样即使录入时漏了美元符号，面板也能一致地用 KaTeX 渲染。
+    const MATH_CHUNK_RE = /([\u4e00-\u9fff，。；：！？、「」『』（）]+)/g
+    const SAFE_MATH_RE = /^[A-Za-z0-9 _^(){}\[\]+\-*/=<>|.,:'\\·≤≥≠≡⇒⇔→←↔×÷±∞∫∑∏∂√⌊⌋⌈⌉⊆⊂⊇∪∩…]+$/
+    const MATH_SIGNAL_RE = /[_^\\\[\]]|[<>=≤≥≠≡⇒⇔]|\b[A-Za-z]\b|\bO\(|\d+[A-Za-z]/
+    const ENGLISH_WORD_RE = /\b[a-z]{4,}\b/
+
+    function wrapMathChunk(chunk) {
+      const lead = (chunk.match(/^\s*/) || [''])[0]
+      const trail = (chunk.match(/\s*$/) || [''])[0]
+      let core = chunk.slice(lead.length, chunk.length - trail.length)
+      if (!core) return chunk
+      const dollars = (core.match(/\$/g) || []).length
+      core = core.replace(/\$/g, '').trim()
+      // 命令后紧跟字母会被拼成未定义命令（\le + dp → \ledp），只给关系/函数命令补空格
+      core = core.replace(
+        /\\(le|ge|ne|equiv|times|cdot|pm|infty|to|Rightarrow|Leftrightarrow|in|subseteq|subsetneq|ldots|dots|cdots|log|ln|min|max|gcd|pmod|bmod)(?=[A-Za-z])/g,
+        (m, name) => `\\${name} `,
+      )
+      if (!core || core.length > 160) return chunk
+      if (!SAFE_MATH_RE.test(core)) return chunk
+      if (!MATH_SIGNAL_RE.test(core)) return chunk
+      // 普通英文句子（无算符、无反斜杠、无下标）不要误包成数学
+      if (!/[=_^\\[\]<>=≤≥≠≡+\-*/]/.test(core) && ENGLISH_WORD_RE.test(core)) return chunk
+      if (dollars % 2 !== 0) return chunk
+      return `${lead}$${core}$${trail}`
+    }
+
+    function autoMathify(text) {
+      if (!text) return text
+      // 先保护已有的数学段与代码段：它们内部可能含中文（\text{不选}），不能再按中文切碎
+      const protectedParts = text.split(/(`[^`]*`|\$\$[\s\S]*?\$\$|\$[^$]*\$)/g)
+      return protectedParts
+        .map((part) => {
+          if (!part) return part
+          if (part.startsWith('`') && part.endsWith('`')) return part
+          if (part.startsWith('$') && part.endsWith('$')) return part
+          const pieces = part.split(MATH_CHUNK_RE)
+          return pieces
+            .map((piece) => {
+              if (!piece || /[\u4e00-\u9fff，。；：！？、「」『』（）]/.test(piece)) return piece
+              return wrapMathChunk(piece)
+            })
+            .join('')
+        })
+        .join('')
+    }
+
+    // 纯 JS 兜底渲染（KaTeX 尚未加载或加载失败时使用）。
     function richTextNodes(text) {
       return splitMathSegments(text).map((segment, index) => {
         if (segment.type === 'text') return segment.value
+        if (segment.type === 'code') {
+          return h(
+            segment.block ? 'pre' : 'code',
+            {
+              key: `c${index}`,
+              className: segment.block ? 'oi-code' : 'oi-code-inline',
+              style: segment.block ? { margin: '4px 0' } : null,
+            },
+            segment.value,
+          )
+        }
         return h(
           'span',
           { key: `m${index}`, style: segment.display ? { display: 'block', textAlign: 'center', margin: '4px 0' } : null },
@@ -521,9 +620,10 @@ window.__ModuleLoader__.load({
       if (cached !== undefined) return cached
       let html = ''
       try {
+        // 严格模式：解析失败就交回纯文本兜底，绝不把红色错误串显示给主人。
         html = katex.renderToString(latex, {
           displayMode,
-          throwOnError: false,
+          throwOnError: true,
           strict: 'ignore',
           trust: false,
           // 只输出 HTML，不重复生成一份 MathML——DOM 减半，排版也更快。
@@ -543,6 +643,16 @@ window.__ModuleLoader__.load({
       const allowKatex = source.length <= 60000
       return cachedSplit(source).map((segment, index) => {
         if (segment.type === 'text') return segment.value
+        if (segment.type === 'code') {
+          return h(
+            segment.block ? 'pre' : 'code',
+            {
+              key: `code${index}`,
+              className: segment.block ? 'oi-code' : 'oi-code-inline',
+            },
+            segment.value,
+          )
+        }
         if (allowKatex) {
           const html = katexRenderHtml(segment.value, segment.display === true)
           if (html) {
@@ -611,6 +721,7 @@ window.__ModuleLoader__.load({
         'button',
         {
           type: 'button',
+          className: 'oi-btn',
           onClick: props.disabled ? undefined : props.onClick,
           title: props.title,
           disabled: props.disabled,
@@ -618,14 +729,17 @@ window.__ModuleLoader__.load({
             {
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 4,
-              border: `1px solid ${tone === 'danger' ? C.border : 'transparent'}`,
+              justifyContent: 'center',
+              gap: 5,
+              border: `1px solid ${tone === 'danger' ? C.border : tone === 'primary' ? 'transparent' : C.border}`,
               background,
               color,
-              borderRadius: 6,
-              padding: '4px 10px',
+              borderRadius: 8,
+              padding: '5px 12px',
               font: 'inherit',
               fontSize: 12,
+              fontWeight: 500,
+              letterSpacing: '0.01em',
               cursor: props.disabled ? 'default' : 'pointer',
               opacity: props.disabled ? 0.7 : 1,
               whiteSpace: 'nowrap',
@@ -672,11 +786,13 @@ window.__ModuleLoader__.load({
               display: 'inline-flex',
               alignItems: 'center',
               gap: 4,
-              padding: '1px 7px',
+              padding: '1px 8px',
               borderRadius: 999,
               border: `1px solid ${C.border}`,
+              background: 'transparent',
               color,
               fontSize: 11,
+              fontWeight: 500,
               lineHeight: '16px',
               whiteSpace: 'nowrap',
             },
@@ -714,15 +830,21 @@ window.__ModuleLoader__.load({
         {
           style: sx(
             {
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
               fontSize: 11.5,
-              textTransform: 'uppercase',
-              letterSpacing: '0.04em',
+              fontWeight: 600,
+              letterSpacing: '0.02em',
               color: C.muted,
-              margin: props.first ? '0 0 6px' : '14px 0 6px',
+              margin: props.first ? '0 0 8px' : '16px 0 8px',
             },
             props.style,
           ),
         },
+        h('span', {
+          style: { width: 3, height: 11, borderRadius: 2, background: C.brand, opacity: 0.75, flex: 'none' },
+        }),
         props.children,
       )
     }
@@ -731,12 +853,13 @@ window.__ModuleLoader__.load({
       return h(
         'div',
         {
+          className: 'oi-card',
           style: sx(
             {
               background: C.layer1,
               border: `1px solid ${C.border}`,
-              borderRadius: 8,
-              padding: props.padding || '10px 12px',
+              borderRadius: 10,
+              padding: props.padding || '12px 14px',
             },
             props.style,
           ),
@@ -760,7 +883,7 @@ window.__ModuleLoader__.load({
         .filter(Boolean)
     }
 
-    // ── 浮层：薄弱题推荐 / 完整知识树 ────────────────────────────────────
+    // ── 浮层：薄弱题推荐 / 完整知识?────────────────────────────────────
     function Overlay(props) {
       return h(
         'div',
@@ -819,6 +942,7 @@ window.__ModuleLoader__.load({
           h(
             'div',
             {
+              className: 'oi-scroll',
               style: {
                 flex: 1,
                 minHeight: 0,
@@ -847,7 +971,7 @@ window.__ModuleLoader__.load({
         try {
           let next = await call('weakProblem', { exclude: seen }, { silent: true })
           if (!next || !next.item) {
-            // 一轮都换完了：清空记录，从第一道重新开始
+            // 一轮都换完了：清空记录，从第一道重新开始。
             setSeen(forgetWeakSeen())
             next = await call('weakProblem', {}, { silent: true })
             if (next && next.item) setSeen(rememberWeakSeen(next.item.key))
@@ -876,7 +1000,7 @@ window.__ModuleLoader__.load({
               h(
                 'div',
                 { style: { fontSize: 11.5, color: C.muted, marginTop: 4, lineHeight: 1.7 } },
-                `掌握度 ${LEVEL_LABEL[weak.level] || '—'} · 风险 ${Number(weak.risk || 0).toFixed(2)}${weak.reasons && weak.reasons.length ? ` · ${weak.reasons.join('；')}` : ''}`,
+          `掌握度 ${LEVEL_LABEL[weak.level] || '未知'} · 风险 ${Number(weak.risk || 0).toFixed(2)}${weak.reasons && weak.reasons.length ? ` · ${weak.reasons.join('、')}` : ''}`,
               ),
               h(Bar, { value: weak.score || 0, color: LEVEL_COLOR[weak.level] || C.warn, style: { marginTop: 8 } }),
             )
@@ -994,7 +1118,7 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { style: { fontSize: 11.5, color: C.muted } },
-          '◆ 非常熟练　● 熟练　◐ 还行　▲ 不熟练　▽ 非常不熟练　○ 空白　· 未测；点的数字是掌握度/覆盖。',
+            '◆ 非常熟练　● 熟练　◐ 还行　▲ 不熟练　▽ 非常不熟练　○ 空白　· 未测；点的数字是掌握度/覆盖数',
         ),
         h(
           'div',
@@ -1052,7 +1176,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    // ── 数据上下文 ───────────────────────────────────────────────────────
+    // ── 数据上下?───────────────────────────────────────────────────────
     const StoreContext = React.createContext(null)
 
     function useStore() {
@@ -1213,14 +1337,43 @@ window.__ModuleLoader__.load({
                 flex: 'none',
               },
             },
-            h('div', { style: { fontSize: 15, fontWeight: 600 } }, 'OI 知识点树'),
-            state
-              ? h(
-                  'div',
-                  { style: { fontSize: 11.5, color: C.muted } },
-                  `节点 ${overview.nodes} · 覆盖 ${overview.coveredPct}% · 题目 ${state.problems.length} · 洞察 ${overview.insights}`,
-                )
-              : null,
+            h(
+              'div',
+              { style: { display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 } },
+              h(
+                'span',
+                {
+                  style: {
+                    width: 24,
+                    height: 24,
+                    flex: 'none',
+                    borderRadius: 8,
+                    border: `1px solid ${C.border}`,
+                    background: C.layer2,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    letterSpacing: '0.02em',
+                    color: C.brand,
+                  },
+                },
+                'OI',
+              ),
+              h(
+                'div',
+                { style: { minWidth: 0 } },
+                h('div', { style: { fontSize: 15, fontWeight: 650, lineHeight: 1.25 } }, 'OI 知识点树'),
+                state
+                  ? h(
+                      'div',
+                      { style: { fontSize: 11.5, color: C.muted, marginTop: 1 } },
+                      `节点 ${overview.nodes} · 覆盖 ${overview.coveredPct}% · 题目 ${state.problems.length} · 洞察 ${overview.insights} · v${CLIENT_BUILD}`,
+                    )
+                  : null,
+              ),
+            ),
             h('div', { style: { flex: 1 } }),
             h(
               Btn,
@@ -1257,11 +1410,12 @@ window.__ModuleLoader__.load({
             'nav',
             {
               style: {
+                flex: 'none',
                 display: 'flex',
-                gap: 4,
+                gap: 6,
                 padding: '0 12px',
                 borderBottom: `1px solid ${C.border}`,
-                flex: 'none',
+                background: C.base,
               },
             },
             TABS.map((entry) =>
@@ -1270,13 +1424,15 @@ window.__ModuleLoader__.load({
                 {
                   key: entry[0],
                   type: 'button',
+                  className: 'oi-tab',
                   onClick: () => app.setTab(entry[0]),
                   style: {
                     border: 'none',
                     borderBottom: `2px solid ${app.tab === entry[0] ? C.brand : 'transparent'}`,
                     background: 'transparent',
                     color: app.tab === entry[0] ? C.text : C.muted,
-                    padding: '7px 10px 6px',
+                    fontWeight: app.tab === entry[0] ? 600 : 500,
+                    padding: '8px 12px 7px',
                     font: 'inherit',
                     fontSize: 12.5,
                     cursor: 'pointer',
@@ -1325,7 +1481,7 @@ window.__ModuleLoader__.load({
                 h(Btn, { onClick: () => app.setNotice('') }, '收起'),
               )
             : null,
-          h('main', { style: { flex: 1, minHeight: 0, overflow: 'auto', padding: 12 } }, body),
+          h('main', { className: 'oi-scroll', style: { flex: 1, minHeight: 0, overflow: 'auto', padding: 14 } }, body),
           weakPick ? h(WeakPickOverlay, { result: weakPick, onClose: () => setWeakPick(null) }) : null,
           fullTree ? h(FullTreeOverlay, { onClose: () => setFullTree(false) }) : null,
         ),
@@ -1366,10 +1522,21 @@ window.__ModuleLoader__.load({
       }
       const directHits = hits.filter((hit) => hit.direct)
       const subtreeHits = hits.filter((hit) => !hit.direct)
-      const problemCount = new Set(hits.map((hit) => hit.problem.id)).size
-      const directProblems = new Set(directHits.map((hit) => hit.problem.id)).size
+      const seenProblemIds = new Set(hits.map((hit) => hit.problem.id))
+      const evidenceHits = []
+      for (const pattern of node.patterns || []) {
+        const text = typeof pattern === 'string' ? pattern : pattern.text || ''
+        for (const example of (pattern && pattern.examples) || []) {
+          const problem = state.problems.find((item) => item.id === example.id || item.key === example.id)
+          if (!problem || seenProblemIds.has(problem.id)) continue
+          seenProblemIds.add(problem.id)
+          evidenceHits.push({ problem, insight: null, key: false, direct: true, label: '句式证据', patternText: text })
+        }
+      }
+      const problemCount = new Set(hits.concat(evidenceHits).map((hit) => hit.problem.id)).size
+      const directProblems = new Set(directHits.concat(evidenceHits).map((hit) => hit.problem.id)).size
       const children = (state.obsNodes || []).filter((item) => item.parent === node.id)
-      const ordered = directHits.concat(subtreeHits)
+      const ordered = directHits.concat(subtreeHits, evidenceHits)
       return h(
         'div',
         { style: { flex: '2 1 340px', minWidth: 240, display: 'flex', flexDirection: 'column', gap: 10 } },
@@ -1403,6 +1570,7 @@ window.__ModuleLoader__.load({
                   'div',
                   { key: index, style: { fontSize: 12, color: pattern && pattern.verified ? C.text : C.muted, lineHeight: 1.75, padding: '4px 0' } },
                   `${pattern && pattern.verified ? '·' : '·[未验证]'} ${text}${names.length ? h('span', { style: { color: C.muted, fontSize: 11 } }, `　例：${names.slice(0, 3).join('、')}`) : null}`,
+            names.length ? h('span', { style: { color: C.muted, fontSize: 11 } }, `　例：${names.slice(0, 3).join('、')}`) : null,
                 )
               }),
             )
@@ -1436,7 +1604,7 @@ window.__ModuleLoader__.load({
             ? ordered.slice(0, 40).map((hit) =>
                 h(
                   'div',
-                  { key: `${hit.problem.id}:${hit.insight.id}`, style: { padding: '6px 0', borderBottom: `1px solid ${C.border}` } },
+                  { key: `${hit.problem.id}:${hit.insight ? hit.insight.id : 'ev'}`, style: { padding: '6px 0', borderBottom: `1px solid ${C.border}` } },
                   h(
                     'div',
                     { style: { display: 'flex', gap: 6, alignItems: 'baseline' } },
@@ -1453,11 +1621,15 @@ window.__ModuleLoader__.load({
                     hit.key ? h(Pill, { color: C.brand }, '精髓') : null,
                     h(Pill, { color: hit.direct ? C.muted : C.border }, hit.direct ? '本节点' : '子方向'),
                   ),
-                  h(
-                    'div',
-                    { style: { fontSize: 11.5, color: C.muted, marginTop: 3, lineHeight: 1.7, whiteSpace: 'pre-wrap' } },
-                    h(MathText, { text: hit.insight.text }),
-                  ),
+                  hit.insight
+                    ? h(
+                        'div',
+                        { style: { fontSize: 11.5, color: C.muted, marginTop: 3, lineHeight: 1.7, whiteSpace: 'pre-wrap' } },
+                        h(MathText, { text: hit.insight.text }),
+                      )
+                    : hit.patternText
+                      ? h('div', { style: { fontSize: 11.5, color: C.muted, marginTop: 3, lineHeight: 1.7 } }, `例证：${hit.patternText}`)
+                      : null,
                 ),
               )
             : h(Empty, null, '还没有观察落在这个节点上。录入题解时把观察挂到「观察/…」路径即可。'),
@@ -1465,7 +1637,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    // ── 知识树 ───────────────────────────────────────────────────────────
+    // ── 知识?───────────────────────────────────────────────────────────
     function TreeTab() {
       const { state, call, busy } = useStore()
       const allNodes = state ? state.nodes : []
@@ -1521,6 +1693,7 @@ window.__ModuleLoader__.load({
           'div',
           {
             key: node.id,
+            className: 'oi-row',
             onClick: () => setSelectedId(node.id),
             style: {
               display: 'flex',
@@ -1669,13 +1842,14 @@ window.__ModuleLoader__.load({
         h(
           'div',
           {
+            className: 'oi-scroll',
             style: {
               flex: 1,
               minHeight: 120,
               overflow: 'auto',
               background: C.layer1,
               border: `1px solid ${C.border}`,
-              borderRadius: 8,
+              borderRadius: 10,
               padding: 6,
             },
           },
@@ -1698,6 +1872,7 @@ window.__ModuleLoader__.load({
                       'div',
                       {
                         key: node.id,
+                        className: 'oi-row',
                         onClick: () => setSelectedId(node.id),
                         style: {
                           padding: '4px 6px',
@@ -1777,7 +1952,7 @@ window.__ModuleLoader__.load({
     function NodeDetail(props) {
       const node = props.node
       const childrenOf = props.childrenOf
-      const { state, call, busy } = useStore()
+      const { state, call, busy, openProblem } = useStore()
 
       const [name, setName] = React.useState(node.name)
       const [summary, setSummary] = React.useState(node.summary || '')
@@ -1861,6 +2036,7 @@ window.__ModuleLoader__.load({
       }
 
       const isIdea = node.tree === 'idea'
+      const childDirs = (childrenOf.get(node.id) || []).slice()
 
       return h(
         'div',
@@ -1906,6 +2082,16 @@ window.__ModuleLoader__.load({
                   node.p75 ? h('span', { key: 'p75' }, `难度 75 分位 ${Math.round(node.p75)}`) : null,
                   h('span', { key: 'risk' }, `风险 ${(node.risk || 0).toFixed(2)}`),
                 ],
+          ),
+          node.summary
+            ? h('div', { style: { fontSize: 12, color: C.muted, marginTop: 6, lineHeight: 1.7 } }, node.summary)
+            : null,
+          h(
+            'div',
+            { style: { fontSize: 11.5, color: C.muted, marginTop: 6, lineHeight: 1.7 } },
+            isIdea
+              ? '这一层记的是「怎么想出来的」：看到什么信号，走哪一步推导。往下挂的题和洞察越多，这条思路越熟。'
+              : '这一层记的是「考什么、怎么用」，不是某道题的具体做法。往下挂的题越多，说明这类题你越稳。',
           ),
           node.reasons && node.reasons.length
             ? h(
@@ -1984,6 +2170,45 @@ window.__ModuleLoader__.load({
               ),
             )
           : null,
+        (node.signals || []).length
+          ? h(
+              Card,
+              null,
+              h(SectionTitle, { first: true }, `子方向（${children.length}）`),
+              node.signals.map((signal, index) =>
+                h(
+                  'div',
+                  { key: index, style: { fontSize: 12, color: C.text, lineHeight: 1.75, padding: '4px 0' } },
+                  `· ${signal}`,
+                ),
+              ),
+            )
+          : null,
+        childDirs.length
+          ? h(
+              Card,
+              null,
+              h(SectionTitle, { first: true }, `子方向（${childDirs.length}）`),
+              childDirs.map((child) =>
+                h(
+                  'div',
+                  {
+                    key: child.id,
+                    role: 'button',
+                    tabIndex: 0,
+                    onClick: () => props.onSelect && props.onSelect(child.id),
+                    style: { display: 'flex', gap: 8, alignItems: 'baseline', padding: '5px 0', cursor: 'pointer', borderBottom: `1px solid ${C.border}` },
+                  },
+                  h('span', { style: { flex: 1, fontSize: 12.5, color: C.text } }, child.name),
+                  h(
+                    'span',
+                    { style: { fontSize: 11, color: C.muted } },
+                    child.tree === 'idea' ? `洞察 ${child.insightCount || 0} · ?${child.linkedProblems || 0}` : `?${child.solvedCount || 0}`,
+                  ),
+                ),
+              ),
+            )
+          : null,
         h(
           Card,
           null,
@@ -2012,67 +2237,40 @@ window.__ModuleLoader__.load({
           null,
           h(SectionTitle, { first: true }, `关联题目（${problems.length}${problems.length > directProblems.length ? `，本节点 ${directProblems.length}` : ''}）`),
           problems.length
-            ? problems.map((problem) =>
-                h(
-                  'div',
-                  {
-                    key: problem.id,
-                    style: {
-                      display: 'flex',
-                      gap: 8,
-                      alignItems: 'baseline',
-                      padding: '3px 0',
-                      borderBottom: `1px solid ${C.border}`,
-                    },
-                  },
-                  h(Pill, null, problem.platform === 'codeforces' ? 'CF' : problem.platform === 'atcoder' ? 'AT' : 'LG'),
-                  touches(problem, directIds) ? null : h(Pill, { color: C.muted, style: { padding: '0 4px', fontSize: 10 } }, '子节点'),
-                  h(
-                    'a',
-                    {
-                      href: problem.url || undefined,
-                      target: '_blank',
-                      rel: 'noreferrer',
-                      style: { color: C.text, textDecoration: 'none', flex: 1, fontSize: 12.5 },
-                    },
-                    problem.title,
-                  ),
-                  problem.rating ? h('span', { style: { fontSize: 11.5, color: C.muted } }, problem.rating) : null,
-                ),
-              )
-            : h('div', { style: { fontSize: 12, color: C.muted, padding: '4px 0' } }, '还没有题挂在这个节点上。'),
-        ),
-        h(
-          Card,
-          null,
-          h(SectionTitle, { first: true }, `沉淀的洞察（${insights.length}）`),
-          insights.length
-            ? KINDS.map((entry) => {
-                const [kind, label] = entry
-                const list = insights.filter((item) => item.insight.kind === kind)
-                if (!list.length) return null
+            ? problems.map((problem) => {
+                const own = (problem.insights || []).filter((insight) => (insight.nodes || []).includes(node.id))
+                const direct = touches(problem, directIds)
                 return h(
                   'div',
-                  { key: kind, style: { marginBottom: 8 } },
-                  h(Pill, { color: C.brand, style: { marginBottom: 4 } }, `${label} ${list.length}`),
-                  list.map((item) =>
+                  { key: problem.id, style: { padding: '7px 0', borderBottom: `1px solid ${C.border}` } },
+                  h(
+                    'div',
+                    { style: { display: 'flex', gap: 6, alignItems: 'baseline', flexWrap: 'wrap' } },
+                    h(Pill, null, problem.platform === 'codeforces' ? 'CF' : problem.platform === 'atcoder' ? 'AT' : 'LG'),
                     h(
-                      'div',
+                      'span',
                       {
-                        key: item.insight.id,
-                        style: { fontSize: 12.5, lineHeight: 1.65, padding: '3px 0 3px 2px' },
+                        role: 'button',
+                        tabIndex: 0,
+                        onClick: () => openProblem(problem.id),
+                        style: { fontSize: 12.5, color: C.text, flex: 1, cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3 },
                       },
-                      item.insight.text ? h(MathText, { text: item.insight.text }) : null,
-                      h(
-                        'div',
-                        { style: { fontSize: 11, color: C.muted } },
-                        `来自《${item.problem.title}》`,
-                      ),
+                      `${problem.title}?{problem.key}${problem.rating ? `?{problem.rating}` : ''}）`,
                     ),
+                      h(Pill, { color: direct ? C.muted : C.border }, direct ? '本节点' : '子节点'),
                   ),
+                  own.length
+                    ? own.map((insight) =>
+                        h(
+                          'div',
+                          { key: insight.id, style: { fontSize: 11.5, color: C.muted, marginTop: 4, lineHeight: 1.7 } },
+                          h(MathText, { text: insight.text }),
+                        ),
+                      )
+                    : null,
                 )
               })
-            : h('div', { style: { fontSize: 12, color: C.muted, padding: '4px 0' } }, '还没有洞察。让 AI 录入题解时会自动提炼。'),
+            : h('div', { style: { fontSize: 12, color: C.muted, padding: '4px 0' } }, '还没有题挂在这个节点上。'),
         ),
       )
     }
@@ -2122,23 +2320,25 @@ window.__ModuleLoader__.load({
         h(
           'div',
           {
+            className: 'oi-scroll',
             style: {
               flex: 1,
               minHeight: 120,
               overflow: 'auto',
               background: C.layer1,
               border: `1px solid ${C.border}`,
-              borderRadius: 8,
+              borderRadius: 10,
               padding: 6,
             },
           },
           problems.length === 0
-            ? h(Empty, null, state.problems.length ? `没有匹配「${query}」的题目。` : '还没有题目。可以直接在对话里跟 AI 说「把这道题录入」，也可以点「录题」手工填。')
+              ? h(Empty, null, state.problems.length ? `没有匹配「${query}」的题目。` : '还没有题目。可以直接在对话里跟 AI 说「把这道题录入」，也可以点「录题」手工填。')
             : problems.map((problem) =>
                 h(
                   'div',
                   {
                     key: problem.id,
+                    className: 'oi-row',
                     onClick: () => setSelectedId(problem.id),
                     style: {
                       padding: '5px 6px',
@@ -2606,7 +2806,7 @@ window.__ModuleLoader__.load({
         ['非常熟练', overview.expert, '◆ 稳定到能当工具用'],
         ['熟练', overview.strong, '● 基本稳，偶尔失手'],
         ['还行', overview.ok, '◐ 有基础但不够稳'],
-        ['不熟练', overview.weak, '▲ 做过但明显不够'],
+            ['不熟练', overview.weak, '▲ 做过但明显不够'],
         ['非常不熟练', overview.poor, '▽ 只沾过边'],
         ['空白', overview.blank, '○ 完全没碰过'],
         ['同步', overview.syncedSolved, '来自账号同步的已通过题'],
@@ -2739,7 +2939,7 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { style: { fontSize: 11.5, color: C.muted, marginBottom: 8, lineHeight: 1.7 } },
-            '相似度只算「精髓观察（60%）+ 其他洞察（22%）+ 算法知识点（18%）」，不算题面文字。候选和库内题目最像的一道都低于阈值，就说明你没见过这类想法。候选需要先经题解消化（sample 入库）才能比较；不填则取最近消化的 10 道。',
+            '相似度只算「精髓观察（60%）+ 其他洞察（22%） 算法知识点（18%）」，不算题面文字。候选和库内题目最像的一道都低于阈值，就说明你没见过这类想法。候选需要先经题解消化（sample 入库）才能比较；不填则取最近消化的 10 道。',
           ),
           h(
             'div',
@@ -2906,7 +3106,7 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { style: { fontSize: 11.5, color: C.muted, lineHeight: 1.7, marginTop: 8 } },
-            'Codeforces 走官方 user.status 接口（只取 AC）；AtCoder 走 kenkoooo 的公开数据；洛谷没有公开 API，用题目列表尽力解析，失败时会如实报错。',
+            'Codeforces 走官方 user.status 接口（只看 AC）；AtCoder 走 kenkoooo 的公开数据；洛谷没有公开 API，用题目列表尽力解析，失败时会如实报错。',
           ),
         ),
         state.accounts.length
@@ -3003,6 +3203,7 @@ window.__ModuleLoader__.load({
 
     // ── 注册 ─────────────────────────────────────────────────────────────
     function apply(ctx) {
+      ensureStyles()
       ctx.slots.inject('main', () =>
         ctx.slots.inject('sidebar.panellist', () => {
           const stopMain = ctx.slots.register({ name: 'main', key: PANEL_ID }, Panel)
@@ -3035,7 +3236,7 @@ window.__ModuleLoader__.load({
       inject: ['slots'],
       name: 'dsh-oi-knowledge',
       apply,
-      __test: { MathText, richTextNodes, mathTokens },
+      __test: { MathText, richTextNodes, mathTokens, splitMathSegments, autoMathify },
     }
   },
 })
