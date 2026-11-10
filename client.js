@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.27'
+    const CLIENT_BUILD = '1.3.28'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -855,7 +855,13 @@ window.__ModuleLoader__.load({
       }, [katexVersion])
       const nodes = React.useMemo(() => renderRichText(text), [text, katexVersion])
       return h('span', { style: (props && props.style) || null }, nodes)
-    }, (prev, next) => (prev.text != null ? prev.text : '') === (next.text != null ? next.text : ''))
+    }, (prev, next) => {
+      if ((prev.text != null ? prev.text : '') !== (next.text != null ? next.text : '')) return false
+      // style 通常每次渲染都是新对象：只比较用得到的字段，避免主题/尺寸变化不重绘。
+      const a = prev.style || {}
+      const b = next.style || {}
+      return ['fontSize', 'fontWeight', 'color', 'lineHeight'].every((key) => a[key] === b[key])
+    })
 
     // ── 基础样式 ─────────────────────────────────────────────────────────
     const inputStyle = {
@@ -3263,9 +3269,20 @@ window.__ModuleLoader__.load({
         }
       }
 
+      const urlFor = (key) => {
+        const target = (state.problems || []).find((problem) => problem.key === key && problem.url)
+        if (target && target.url) return target.url
+        // 没有存过的题：按题号形态猜平台，别把 CF 题号拼到 AtCoder 站点。
+        if (/^\d+[A-Za-z]\d?$/.test(key)) {
+          const matched = key.match(/^(\d+)([A-Za-z]\d?)$/)
+          return `https://codeforces.com/problemset/problem/${matched[1]}/${matched[2]}`
+        }
+        if (/^[a-z0-9]+_[a-z0-9]+$/i.test(key)) return `https://atcoder.jp/contests/${key.split('_')[0]}/tasks/${key}`
+        if (/^P\d+$/i.test(key)) return `https://www.luogu.com.cn/problem/${key}`
+        return `https://atcoder.jp/tasks/${key}`
+      }
       const touchProblem = (key) => {
-        const target = (state.problems || []).find((problem) => problem.key === key)
-        const url = target && target.url ? target.url : `https://atcoder.jp/tasks/${key}`
+        const url = urlFor(key)
         // 先开窗，避免 await 之后被浏览器当成弹窗拦截。
         try {
           window.open(url, '_blank', 'noopener')
@@ -3373,7 +3390,7 @@ window.__ModuleLoader__.load({
                             h(RichLines, { text: quizItem.statementZh }),
                           )
                         : h('div', { style: { fontSize: 12, color: C.muted, border: `1px dashed ${C.border}`, borderRadius: 8, padding: 10 } },
-                            '这道题的中文题意已经排进翻译队列，稍后点右上角「刷新」就能看到。',
+                            '这道题的中文题意已经排进翻译队列：可以点「再试一次自动整理」，或者让我补译后回填（不用反复刷新）。',
                             h(Btn, {
                               onClick: repairZh,
                               disabled: repairing,
