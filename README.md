@@ -30,7 +30,7 @@ plugin_manager action=remove_bundle target=dsh-oi-knowledge
 
 | 标签 | 作用 |
 | --- | --- |
-| **知识树** | 左上角可切换「知识 / 思路 / 观察」三棵树。知识树看掌握度、题数、洞察、推荐练习题；思路树看关联题数与洞察数；观察树看每个观察方向挂了多少条精髓观察，节点详情列出对应题目。三棵树都能改名/改备注、加子节点、移动、删除。 |
+| **知识树** | 左上角可切换「知识 / 思路 / 观察」三棵树。知识树看掌握度、题数、洞察、推荐练习题；思路树看关联题数与洞察数；观察树看每个观察方向挂了多少条精髓观察，节点详情列出对应题目（可点击跳到题目页）与子方向；观察句式按「真题证据」标注：至少 2 道题的 observation 能支撑才标为已验证并附例，其余灰显为未验证。三棵树都能改名/改备注、加子节点、移动、删除。 |
 | **题目** | 题目列表与筛选；录入新题目（链接自动补全标题/评分/标签），可以写一句「精髓」；题目详情里按类型管理洞察、改状态、标记「卡在哪一步」、重新分类、编辑精髓/题面/题解。 |
 | **弱点** | 概览（覆盖、非常熟练/熟练/还行/不熟练/非常不熟练/空白、思路覆盖率）、知识点风险榜、最该补的思路、反套路推荐、标签覆盖表、未归类的已通过题。 |
 | **账号** | 绑定/同步/移除 Codeforces、AtCoder、洛谷 账号，查看数据目录。 |
@@ -85,6 +85,9 @@ oi_problem action=add url="https://atcoder.jp/contests/abc300/tasks/abc300_f" \
   insights="先观察答案随操作次数的单调性 | 二分答案 + 差分 check | 注意空集情况"
 
 oi_problem action=add_insight problem="CF 1234E" kind=trick text="把交替和改写成前缀和之差" nodes="贡献拆分"
+
+oi_problem action=add url="atcoder:abc999_z" pool=quiz verdict=unsolved \
+  # 只进「未通过出题池」：不挂知识树、不计入统计、不进相似度基线，供 P1 方向训练抽题
 oi_problem action=update problem="CF 1234E" verdict=attempted
 oi_problem action=stuck problem="CF 1234E" stage=observe   # 卡点：observe/derive/implement/debug
 oi_problem action=classify problem="CF 1234E"    # 按标签/题面重新挂知识点
@@ -118,7 +121,7 @@ oi_account action=remove platform=luogu handle=123456
 
 第三层结构是**观察树**（`kb.obsNodes`，67 个节点，8 个分支：结构性质、转化与化归、计数与期望、贪心与决策、图与结构、代数与数论、交互与信息、搜索空间）。它比思路树再细一层，专门记「这一步到底看出了什么」——例如「不变量与势能」下面会继续分成守恒量、单调解、奇偶性、势能函数。
 
-每个观察节点上还挂着一组**观察句式**（`node.patterns`，共 218 条，用 `oi_kb action=obs_patterns` 浏览）：从 Codeforces [Good Observations](https://codeforces.com/blog/entry/118706)、[Tricks that I learnt while practicing](https://codeforces.com/blog/entry/84150)、博客园 [OI trick？](https://www.cnblogs.com/thousandsofyears/p/18990424)、[OI Wiki 常见技巧](https://github.com/oi-wiki/oi-wiki/blob/master/docs/contest/common-tricks.md) 以及题解里反复出现的结论中整理出来的「触发条件 + 结论 + 用途」。录题或复习时先扫这些句式，比盲翻题解快。
+每个观察节点上还挂着一组**观察句式**（`node.patterns`，当前 167 条候选、其中 53 条已由真题证据确认，用 `oi_kb action=obs_patterns` 浏览）：从 Codeforces [Good Observations](https://codeforces.com/blog/entry/118706)、[Tricks that I learnt while practicing](https://codeforces.com/blog/entry/84150)、博客园 [OI trick？](https://www.cnblogs.com/thousandsofyears/p/18990424)、[OI Wiki 常见技巧](https://github.com/oi-wiki/oi-wiki/blob/master/docs/contest/common-tricks.md) 以及题解里反复出现的结论中整理出来的「触发条件 + 结论 + 用途」。录题或复习时先扫这些句式，比盲翻题解快。
 
 每道题还有 1–3 条**精髓观察**（`problem.keyObservations`）：分析中最长、最关键的跳跃。`oi_problem action=add` 时洞察若标了 `key: true` 就优先入选，否则按洞察文本长度取前三条。它们不只是一行文字，还会被用来算题目之间的相似度：
 
@@ -262,7 +265,7 @@ lib/store.js      kb.json 读写、原子写、id
 lib/tree.js       树操作与节点解析（id / 路径 / 名称）
 lib/taxonomy.js   内置算法知识树种子 + Codeforces 标签映射
 lib/ideas.js      内置思路树种子（105 个节点，11 个分支）
-lib/observation.js 观察树种子（58 个叶子 + 218 条观察句式）
+lib/observation.js 观察树种子（58 个叶子 + 167 条观察句式）
 lib/similarity.js 观察/洞察/算法三层相似度与阈值校准
 lib/analysis.js   覆盖/掌握度/风险/推荐
 lib/sync.js       三个平台的同步

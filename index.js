@@ -209,6 +209,11 @@ function registerTools(ctx, service) {
           statement: { type: 'string', description: '题意摘要' },
           solution: { type: 'string', description: '题解（可整段贴）' },
           nodes: { type: 'array', items: { type: 'string' }, description: '要挂的知识点（id / 路径 / 名字）' },
+          pool: {
+            type: 'string',
+            enum: ['quiz'],
+            description: 'quiz：只进未通过出题池（不挂知识树、不计统计、不进相似度基线）',
+          },
           insights: {
             type: 'array',
             description: '随题一起录入的洞察',

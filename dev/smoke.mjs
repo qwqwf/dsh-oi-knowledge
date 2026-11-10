@@ -132,6 +132,23 @@ service.addProblem({
 })
 check('第二道题录入', service.kb().problems.length === 2)
 
+service.addProblem({
+  platform: 'atcoder',
+  key: 'abc999_z',
+  title: 'Quiz Only Sample',
+  rating: 2600,
+  verdict: 'unsolved',
+  pool: 'quiz',
+  essence: '只进未通过出题池',
+  insights: [{ kind: 'observation', text: '观察句式只给判分用，不挂知识树。' }],
+})
+const quizProblem = service.kb().problems.find((problem) => problem.key === 'abc999_z')
+check('quiz 不挂知识点', quizProblem && quizProblem.pool === 'quiz' && quizProblem.nodes.length === 0)
+check('quiz 不计入总览', service.analysis().overview.manualProblems === 2)
+check('quiz 出现在面板数据', service.state().problems.some((problem) => problem.pool === 'quiz'))
+service.removeProblem({ problem: 'atcoder:abc999_z' })
+check('quiz 可移除', !service.kb().problems.some((problem) => problem.key === 'abc999_z'))
+
 // ── 模拟账号同步 ─────────────────────────────────────────────────────────
 section('simulated sync')
 service.mutate((kb) => {

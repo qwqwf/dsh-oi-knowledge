@@ -1131,7 +1131,26 @@ window.__ModuleLoader__.load({
         return () => clearTimeout(timer)
       }, [notice])
 
-      return { state, error, notice, busy, tab, setTab, reload, call, setNotice, setError }
+      const [focusProblem, setFocusProblem] = React.useState(null)
+      const openProblem = React.useCallback((id) => {
+        setFocusProblem({ id: String(id), at: Date.now() })
+        setTab('problems')
+      }, [])
+
+      return {
+        state,
+        error,
+        notice,
+        busy,
+        tab,
+        setTab,
+        reload,
+        call,
+        setNotice,
+        setError,
+        focusProblem,
+        openProblem,
+      }
     }
 
     // ── 面板外壳 ─────────────────────────────────────────────────────────
@@ -1316,7 +1335,8 @@ window.__ModuleLoader__.load({
     // ── 观察节点详情 ─────────────────────────────────────────────────────
     function ObsDetail(props) {
       const node = props.node
-      const { state } = useStore()
+      const onSelect = props.onSelect
+      const { state, openProblem } = useStore()
       const descendants = new Set([node.id])
       let grew = true
       while (grew) {
@@ -1328,14 +1348,28 @@ window.__ModuleLoader__.load({
           }
         }
       }
+      const pathById = new Map((state.obsNodes || []).map((item) => [item.id, item.path]))
       const hits = []
       for (const problem of state.problems) {
         for (const insight of problem.insights || []) {
           if (insight.kind !== 'observation') continue
-          if (!(insight.obsNodes || []).some((id) => descendants.has(id))) continue
-          hits.push({ problem, insight, key: (problem.keyObservations || []).includes(insight.id) })
+          const inside = (insight.obsNodes || []).filter((id) => descendants.has(id))
+          if (!inside.length) continue
+          hits.push({
+            problem,
+            insight,
+            key: (problem.keyObservations || []).includes(insight.id),
+            direct: inside.includes(node.id),
+            label: inside.includes(node.id) ? '本节点' : pathById.get(inside[0]) || '子方向',
+          })
         }
       }
+      const directHits = hits.filter((hit) => hit.direct)
+      const subtreeHits = hits.filter((hit) => !hit.direct)
+      const problemCount = new Set(hits.map((hit) => hit.problem.id)).size
+      const directProblems = new Set(directHits.map((hit) => hit.problem.id)).size
+      const children = (state.obsNodes || []).filter((item) => item.parent === node.id)
+      const ordered = directHits.concat(subtreeHits)
       return h(
         'div',
         { style: { flex: '2 1 340px', minWidth: 240, display: 'flex', flexDirection: 'column', gap: 10 } },
@@ -1373,12 +1407,33 @@ window.__ModuleLoader__.load({
               }),
             )
           : null,
+        children.length
+          ? h(
+              Card,
+              null,
+              h(SectionTitle, { first: true }, `子方向（${children.length}）`),
+              children.map((child) =>
+                h(
+                  'div',
+                  {
+                    key: child.id,
+                    role: 'button',
+                    tabIndex: 0,
+                    onClick: () => onSelect && onSelect(child.id),
+                    style: { display: 'flex', gap: 8, alignItems: 'baseline', padding: '5px 0', cursor: 'pointer', borderBottom: `1px solid ${C.border}` },
+                  },
+                  h('span', { style: { flex: 1, fontSize: 12.5, color: C.text } }, child.name),
+                  h('span', { style: { fontSize: 11, color: C.muted } }, `观察 ${child.count || 0} 条`),
+                ),
+              ),
+            )
+          : null,
         h(
           Card,
           null,
-          h(SectionTitle, { first: true }, `挂在这个观察上的题（${hits.length}）`),
-          hits.length
-            ? hits.slice(0, 40).map((hit) =>
+          h(SectionTitle, { first: true }, `关联题目（${problemCount}，本节点 ${directProblems}）`),
+          ordered.length
+            ? ordered.slice(0, 40).map((hit) =>
                 h(
                   'div',
                   { key: `${hit.problem.id}:${hit.insight.id}`, style: { padding: '6px 0', borderBottom: `1px solid ${C.border}` } },
@@ -1386,16 +1441,17 @@ window.__ModuleLoader__.load({
                     'div',
                     { style: { display: 'flex', gap: 6, alignItems: 'baseline' } },
                     h(
-                      'a',
+                      'span',
                       {
-                        href: hit.problem.url,
-                        target: '_blank',
-                        rel: 'noreferrer',
-                        style: { fontSize: 12.5, color: C.text, textDecoration: 'none', flex: 1 },
+                        role: 'button',
+                        tabIndex: 0,
+                        onClick: () => openProblem(hit.problem.id),
+                        style: { fontSize: 12.5, color: C.text, flex: 1, cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3 },
                       },
                       `${hit.problem.title}（${hit.problem.key}${hit.problem.rating ? `，${hit.problem.rating}` : ''}）`,
                     ),
                     hit.key ? h(Pill, { color: C.brand }, '精髓') : null,
+                    h(Pill, { color: hit.direct ? C.muted : C.border }, hit.direct ? '本节点' : '子方向'),
                   ),
                   h(
                     'div',
@@ -1669,7 +1725,7 @@ window.__ModuleLoader__.load({
 
       const right = selected
         ? selected.tree === 'obs'
-          ? h(ObsDetail, { key: selected.id, node: selected })
+          ? h(ObsDetail, { key: selected.id, node: selected, onSelect: setSelectedId })
           : h(NodeDetail, { key: selected.id, node: selected, childrenOf: children })
         : h(
             'div',
@@ -2023,10 +2079,17 @@ window.__ModuleLoader__.load({
 
     // ── 题目 ─────────────────────────────────────────────────────────────
     function ProblemsTab() {
-      const { state, call, busy } = useStore()
+      const { state, call, busy, focusProblem } = useStore()
       const [query, setQuery] = React.useState('')
       const [selectedId, setSelectedId] = React.useState(null)
       const [adding, setAdding] = React.useState(false)
+
+      React.useEffect(() => {
+        if (focusProblem && focusProblem.id) {
+          setSelectedId(focusProblem.id)
+          setAdding(false)
+        }
+      }, [focusProblem])
 
       const problems = React.useMemo(() => {
         const word = query.trim().toLowerCase()
