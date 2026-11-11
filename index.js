@@ -11,7 +11,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { KbError, KbStore, defaultDataDir } from './lib/store.js'
 import { KnowledgeService } from './lib/service.js'
-import { setHostTranslate, setHostTranslateProbe, setHostWebFetch, setTranslateSession } from './lib/sync.js'
+import { setHostGenerate, setHostTranslate, setHostTranslateProbe, setHostWebFetch, setTranslateSession } from './lib/sync.js'
 
 export const inject = ['tools']
 
@@ -387,6 +387,7 @@ function registerTools(ctx, service) {
         '  sample — 面板用：从本地已译题库抽一批中文新题（不足会提示补货）；',
         '  refill — 补货：从 AtCoder/Codeforces 原库抽新题、抓英文题面入库，把原文返回给模型翻译，翻好用 oi_problem update 回填；',
         '  repair — 补抓 quiz 池里题面缺失的题（走宿主 web 抓取并翻成中文）。',
+        '  digest — 给 quiz 池里还没写精髓的题补精髓与 3–5 条洞察（limit 默认 6）。',
         '面板提交思路时会自动调用 judge；review 留给对话里的人工复核。',
       ].join('\n'),
       parameters: {
@@ -396,7 +397,7 @@ function registerTools(ctx, service) {
         properties: {
           action: {
             type: 'string',
-            enum: ['card', 'mark', 'attempt', 'judge', 'review', 'reveal', 'grade', 'session_start', 'session_touch', 'session_finish', 'stats', 'sample', 'repair', 'refill', 'probe', 'pending', 'apply_zh'],
+            enum: ['card', 'mark', 'attempt', 'judge', 'review', 'reveal', 'grade', 'session_start', 'session_touch', 'session_finish', 'stats', 'sample', 'repair', 'digest', 'refill', 'probe', 'pending', 'apply_zh'],
           },
           kind: { type: 'string', enum: ['pattern', 'problem'], description: 'card：卡片类型' },
           node: { type: 'string', description: 'card：限定某个观察节点' },
@@ -417,6 +418,7 @@ function registerTools(ctx, service) {
             description: 'session_finish：题号 → AC 时间（ISO 或毫秒时间戳）',
           },
           size: { type: 'number', description: 'sample：抽几道新题（1–6，默认 3）' },
+          limit: { type: 'number', description: 'digest：这次最多补几道（1–20，默认 6）' },
           items: {
             type: 'array',
             description: 'apply_zh：回填中文题意，元素形如 { ref: "atcoder:abc123_f", zh: "…", titleZh: "…" }',
@@ -432,7 +434,7 @@ function registerTools(ctx, service) {
           },
         },
       },
-      timeoutMs: 180000,
+      timeoutMs: 900000,
       output: SUMMARY_OUTPUT,
       async execute(args, exec) {
         try {
@@ -470,6 +472,9 @@ function registerTools(ctx, service) {
               return toolOk(await service.sampleQuiz({ size: args.size || 3 }))
             case 'repair':
               return toolOk(await service.repairQuizStatements())
+            case 'digest':
+              // 给 quiz 池里还没写精髓的题补精髓与洞察。
+              return toolOk(await service.digestQuizProblems({ limit: args.limit }))
             case 'refill':
               // 补货：抽新题、抓英文题面入库，把英文原文返回给模型翻译；翻好后用 oi_problem update 回填中文。
               return toolOk(await service.sampleQuiz({ size: args.size || 6, deferTranslate: true }))
@@ -795,6 +800,38 @@ export function apply(ctx, config = {}) {
       if (cut > 80) out = out.slice(0, cut)
       return out.trim()
     }
+
+    // 通用模型调用：给新抽的题写精髓与洞察。
+    async function runModel(prompt, options = {}) {
+      const { provider, model } = modelOf()
+      if (!provider || !model) return ''
+      let out = ''
+      let finish = null
+      try {
+        const stream = llm.stream({
+          provider,
+          model,
+          system:
+            options.system ||
+            '你是算法竞赛出题与题解作者。只输出一个 JSON 对象，不要 Markdown、不要解释、不要代码块围栏。',
+          messages: [{ role: 'user', content: [{ type: 'text', text: String(prompt || '').slice(0, 9000) }] }],
+          temperature: 0.2,
+          maxTokens: options.maxTokens || 900,
+          signal: AbortSignal.timeout(90000),
+        })
+        for await (const chunk of stream) {
+          if (chunk?.type === 'text-delta' && chunk.text) out += chunk.text
+          if (chunk?.type === 'finish') finish = chunk.reason || null
+          if (chunk?.type === 'error') return `[model-error] ${JSON.stringify(chunk).slice(0, 160)}`
+        }
+      } catch (error) {
+        return `[model-error] ${String(error?.message || error).slice(0, 160)}`
+      }
+      if (!out.trim()) return `[model-empty] finish=${JSON.stringify(finish).slice(0, 120)}`
+      return out.trim()
+    }
+
+    setHostGenerate((prompt, options) => runModel(prompt, options))
 
     async function translateByModel(text, options = {}) {
       const { provider, model } = modelOf()
