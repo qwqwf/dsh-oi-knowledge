@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.38'
+    const CLIENT_BUILD = '1.3.39'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -3105,10 +3105,19 @@ window.__ModuleLoader__.load({
     }
 
     function TrainingTab() {
-      const { state, call, busy } = useStore()
+      const { state, call, busy, setNotice } = useStore()
       const training = state.training || {}
       const quizList = training.quiz || []
       const sessions = training.sessions || []
+      // 抽题窗口（由服务端按 CF/AT 分数算出）。本地兜底也必须遵守，否则会混进旧的低分题。
+      const ratingWindows = training.ratingWindows || {}
+      const inWindow = (item) => {
+        const window = ratingWindows[item.platform]
+        if (!window) return true
+        const rating = Number(item.rating)
+        return Number.isFinite(rating) && rating >= window.min && rating <= window.max
+      }
+      const eligibleQuizList = quizList.filter(inWindow)
 
       const [card, setCard] = React.useState(null)
       const [flipped, setFlipped] = React.useState(false)
@@ -3198,21 +3207,33 @@ window.__ModuleLoader__.load({
       const [quizPreparing, setQuizPreparing] = React.useState(false)
 
       const pickBatch = () => {
-        if (!quizList.length) return []
+        if (!eligibleQuizList.length) return []
         const recent = quizRecentList()
-        const unseen = quizList.filter((item) => !recent.includes(item.key))
+        const unseen = eligibleQuizList.filter((item) => !recent.includes(item.key))
         if (unseen.length < 3) clearQuizRecent()
-        const pool = unseen.length >= 3 ? unseen : quizList
+        const pool = unseen.length >= 3 ? unseen : eligibleQuizList
         const shuffled = pool.slice().sort(() => Math.random() - 0.5).slice(0, 3)
         rememberQuizRecent(shuffled.map((item) => item.key))
         return shuffled.map((item) => item.key)
       }
 
+      // 本地兜底/恢复的题如果不在分数窗口内，就换一批窗口内的；没有就保持空。
       React.useEffect(() => {
-        if (!quizKeys.length && quizList.length) setQuizKeys(pickBatch())
-      }, [quizList.length])
+        if (!quizList.length) return
+        const current = quizKeys.map((key) => quizList.find((item) => item.key === key)).filter(Boolean)
+        const valid = current.filter(inWindow)
+        if (!valid.length) {
+          const batch = pickBatch()
+          if (batch.length) {
+            setQuizKeys(batch)
+            resetQuizView()
+          }
+          return
+        }
+        if (valid.length !== quizKeys.length) setQuizKeys(valid.map((item) => item.key))
+      }, [quizList.length, JSON.stringify(ratingWindows)])
 
-      const quizBatch = quizKeys.map((key) => quizList.find((item) => item.key === key)).filter(Boolean)
+      const quizBatch = quizKeys.map((key) => quizList.find((item) => item.key === key)).filter((item) => item && inWindow(item))
 
       const resetQuizView = () => {
         setQuizKey('')
@@ -3239,6 +3260,8 @@ window.__ModuleLoader__.load({
           if (fallback.length) {
             setQuizKeys(fallback)
             resetQuizView()
+          } else {
+            setNotice('这一轮没抽到分数窗口内的题（题库暂时不可用），稍后再点「换一批」试试。')
           }
         }
         setQuizPreparing(false)
