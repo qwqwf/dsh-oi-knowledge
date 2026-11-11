@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.41'
+    const CLIENT_BUILD = '1.3.42'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -1182,8 +1182,9 @@ window.__ModuleLoader__.load({
         setHintLoading(level)
         setHintError('')
         let next = null
+        let detail = ''
         try {
-          const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 75000))
+          const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 120000))
           next = await Promise.race([
             call(
               'hintProblem',
@@ -1202,11 +1203,16 @@ window.__ModuleLoader__.load({
           ])
         } catch (error) {
           next = null
+          detail = String(error && error.message ? error.message : error || '')
         } finally {
           setHintLoading(0)
         }
         if (!next) {
-          setHintError('这一级提示没能生成（题面没抓到、模型超时，或请求中断），稍后再试；已经解锁的级别不会丢。')
+          setHintError(
+            detail
+              ? `这一级没生成出来：${detail}（已解锁的级别不会丢）`
+              : '这一级提示没能生成（题面没抓到、模型超时，或请求中断），稍后再试；已经解锁的级别不会丢。',
+          )
           return
         }
         setHints(next.hints || {})

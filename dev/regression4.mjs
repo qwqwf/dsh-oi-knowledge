@@ -89,6 +89,25 @@ const jump = await soloService.hintProblem({ platform: 'atcoder', key: 'abc999_x
 check('直接点 L3 也只解锁到 L1', jump.unlocked === 1 && Boolean(jump.hints.l1) && !jump.hints.l2)
 check('跳级请求也只生成一级', genCalls === jumpBefore + 1)
 
+console.log('\n[提示] 模型失败时用库内材料兜底')
+setHostGenerate(async () => '')
+service.addProblem({
+  platform: 'atcoder',
+  key: 'abc999_w',
+  title: 'Fallback',
+  rating: 2400,
+  pool: 'quiz',
+  verdict: 'unsolved',
+  statement: longStatement,
+  essence: '差分前缀和的正负号变化次数就是答案。',
+  insights: [{ kind: 'observation', text: '一次操作只改变差分数组的一个位置。' }],
+})
+const fb = await service.hintProblem({ platform: 'atcoder', key: 'abc999_w', level: 1 })
+check('模型空输出时 L1 有兜底', fb.unlocked === 1 && Boolean(fb.hints.l1))
+await service.hintProblem({ platform: 'atcoder', key: 'abc999_w', level: 2 })
+const fb3 = await service.hintProblem({ platform: 'atcoder', key: 'abc999_w', level: 3 })
+check('L3 兜底用精髓而不是报错', Boolean(fb3.hints.l3) && fb3.hints.l3.includes('差分'))
+
 console.log('\n[提示] 校验与异常')
 let threw = ''
 try {

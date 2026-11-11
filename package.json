@@ -1,6 +1,6 @@
 {
   "name": "dsh-oi-knowledge",
-  "version": "1.3.41",
+  "version": "1.3.42",
   "description": "OI/ICPC 知识点树：把题目与题解拆成观察、套路、思路与坑点，维护可自检训练弱点的知识点树，并同步 Codeforces / AtCoder / 洛谷 账号。",
   "type": "module",
   "main": "index.js",
