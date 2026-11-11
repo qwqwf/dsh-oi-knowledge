@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.42'
+    const CLIENT_BUILD = '1.3.43'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -1197,7 +1197,7 @@ window.__ModuleLoader__.load({
                 statement: item.statement || '',
                 truth: item.truth || '',
               },
-              { silent: true },
+              { silent: true, throwOnError: true },
             ),
             timeout,
           ])
@@ -1666,7 +1666,10 @@ window.__ModuleLoader__.load({
             }
             if (!response.ok || !payload || payload.ok !== true) {
               const message = payload && payload.error ? payload.error : `HTTP ${response.status}`
-              throw new Error(message)
+              const failure = new Error(message)
+              failure.status = response.status
+              if (options && options.throwOnError) throw failure
+              throw failure
             }
             const result = payload.result || {}
             if (result.summary && !silent) setNotice(result.summary)
@@ -1674,6 +1677,7 @@ window.__ModuleLoader__.load({
             await reload()
             return result
           } catch (cause) {
+            if (options && options.throwOnError) throw cause
             setError(cause && cause.message ? cause.message : String(cause))
             return null
           } finally {
