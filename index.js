@@ -109,7 +109,7 @@ function registerTools(ctx, service) {
           },
         },
       },
-      timeoutMs: 120000,
+      timeoutMs: 180000,
       output: SUMMARY_OUTPUT,
       async execute(args) {
         try {
@@ -346,7 +346,7 @@ function registerTools(ctx, service) {
           force: { type: 'boolean', description: '忽略缓存，强制重新拉取' },
         },
       },
-      timeoutMs: 120000,
+      timeoutMs: 180000,
       output: SUMMARY_OUTPUT,
       async execute(args) {
         try {
@@ -387,7 +387,7 @@ function registerTools(ctx, service) {
         '  sample — 面板用：按平台分数 +200~+400 实时抽新题，抓题面、翻成中文并补精髓；',
         '  refill — 补货：抽新题抓英文题面入库（不翻译），原文返回给模型翻译，翻好用 oi_problem update 回填；',
         '  repair — 补抓 quiz 池里题面缺失或中文缺失的题（走宿主抓取并翻成中文）；',
-        '  digest — 给 quiz 池里还没写精髓的题补精髓与 3–5 条洞察（limit 1–8 默认 6；有手写洞察的题默认跳过，overwrite=true 才覆盖并备份）；',
+        '  digest — 给 quiz 池里还没写精髓的题补精髓与 2–6 条洞察（limit 1–8 默认 6；有手写洞察的题默认跳过，overwrite=true 才覆盖并备份）；',
         '  pending — 列出翻译队列里的题（含英文题面），limit 默认 6；',
         '  apply_zh — 回填中文题意（items: [{ref, zh, titleZh}]）；',
         '  probe — 探测翻译通道（translator / llm）是否可用；',
@@ -431,6 +431,8 @@ function registerTools(ctx, service) {
             description: 'session_finish：题号 → AC 时间（ISO 或毫秒时间戳）',
           },
           size: { type: 'number', description: 'sample：抽几道新题（1–6，默认 3）' },
+          ratingMin: { type: 'number', description: 'sample：手动指定抽题分数下限（给了就跳过平台分数拉取）' },
+          ratingMax: { type: 'number', description: 'sample：手动指定抽题分数上限' },
           limit: { type: 'number', description: 'pending：列出几条待译（1–20，默认 6）；digest：这次最多补几道（1–8，默认 6）' },
           overwrite: { type: 'boolean', description: 'digest：已有手写洞察的题是否覆盖（默认 false，覆盖前备份到 digestBackup）' },
           items: {
@@ -463,7 +465,9 @@ function registerTools(ctx, service) {
                 if (!row || !Number.isFinite(row.rating)) {
                   return `${label}：没读到分数${row && row.reason ? `（${row.reason}）` : ''}`
                 }
-                const window = `${Math.max(800, Math.round(row.rating) + 200)}–${Math.min(4000, Math.round(row.rating) + 400)}`
+                const max = Math.min(4000, Math.max(800, Math.round(row.rating) + 400))
+                const min = Math.min(max, Math.max(800, Math.round(row.rating) + 200))
+                const window = `${min}–${max}`
                 return `${label}：**${row.rating}** 分（${row.source === 'live' ? '刚拉取' : '缓存'}${row.fetchedAt ? `，${String(row.fetchedAt).slice(0, 16).replace('T', ' ')}` : ''}）→ 抽题窗口 ${window}`
               }
               return toolOk({
@@ -884,12 +888,43 @@ export function apply(ctx, config = {}) {
       const { provider, model } = modelOf()
       if (!provider || !model) return ''
       const raw = String(text || '')
-      const piece0 = options.mode === 'statement' ? trimForBrief(raw) : raw
-      const source = piece0.slice(0, 9000)
+      // 「简要题意」是概括，不是逐段翻译：一次喂完整题面，避免每段各自总结后语义重复。
+      if (options.mode === 'statement') {
+        const source = trimForBrief(raw).slice(0, 3600)
+        if (!source.trim()) return ''
+        const ask = async (maxTokens) => {
+          let out = ''
+          let reason = ''
+          try {
+            const stream = llm.stream({
+              provider,
+              model,
+              system:
+                '你是算法竞赛题面的中文改写器。把用户给的英文题面概括成 2–5 句简体中文题意：只讲任务与关键设定，不要输入/输出格式、不要约束列表、不要样例、不要「得分」等信息；数学记号保持 LaTeX 原样并统一用 $...$ 包住（不要用 \\(...\\)）；总字数不超过 220；不要标题、不要解释、不要代码块。',
+              messages: [{ role: 'user', content: [{ type: 'text', text: source }] }],
+              temperature: 0.1,
+              maxTokens,
+              signal: AbortSignal.timeout(90000),
+            })
+            for await (const chunk of stream) {
+              if (chunk?.type === 'text-delta' && chunk.text) out += chunk.text
+              if (chunk?.type === 'finish') reason = String(chunk.reason?.kind || '')
+            }
+          } catch (_) {
+            return ''
+          }
+          return reason === 'max-tokens' ? '' : out.trim()
+        }
+        const first = await ask(1200)
+        // 空输出常见于「先思考把预算吃光」，给一次更大的预算重试；仍失败就整体失败，不拼半截。
+        return first || (await ask(2400))
+      }
+      const source = raw.slice(0, 9000)
       if (!source.trim()) return ''
       const pieces = []
       for (let i = 0; i < source.length; i += 1500) pieces.push(source.slice(i, i + 1500))
       const done = []
+      let failed = 0
       for (const piece of pieces) {
         try {
           const signal = AbortSignal.timeout(60000)
@@ -898,9 +933,7 @@ export function apply(ctx, config = {}) {
             provider,
             model,
             system:
-              options.mode === 'statement'
-                ? '你是算法竞赛题面的中文改写器。把用户给的英文题面概括成 2–5 句简体中文题意：只讲任务与关键设定，不要输入/输出格式、不要约束列表、不要样例、不要「得分」等信息；数学记号保持 LaTeX 原样并统一用 $...$ 包住（不要用 \\(...\\)）；总字数不超过 220；不要标题、不要解释、不要代码块。'
-                : '你是算法竞赛题面的翻译器。把用户给的英文片段译成简体中文；数学记号保持 LaTeX 原样并统一用 $...$ 包住（不要用 \\(...\\)）；不要解释、不要加标题、不要输出代码块。',
+              '你是算法竞赛题面的翻译器。把用户给的英文片段译成简体中文；数学记号保持 LaTeX 原样并统一用 $...$ 包住（不要用 \\(...\\)）；不要解释、不要加标题、不要输出代码块。',
             messages: [{ role: 'user', content: [{ type: 'text', text: piece }] }],
             temperature: 0.1,
             maxTokens: 900,
@@ -911,10 +944,13 @@ export function apply(ctx, config = {}) {
             if (chunk?.type === 'finish' && chunk.reason?.kind === 'error') break
           }
           if (out.trim()) done.push(out.trim())
+          else failed += 1
         } catch (_) {
-          /* 这一段失败就跳过，其余段继续 */
+          failed += 1
         }
       }
+      // 多段里丢了任何一段都算整体失败：调用方会退回别的通道或标记待补，不能静默交半截译文。
+      if (failed > 0) return ''
       return done.join('\n')
     }
 

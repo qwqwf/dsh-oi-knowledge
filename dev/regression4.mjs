@@ -77,6 +77,13 @@ const stats1 = service.hintStats()
 check('记录一条看提示做出', stats1.total === 1 && stats1.hinted === 1)
 check('看提示不计入零提示通过', stats1.soloZero === 0 && stats1.zeroHintRate === 0)
 
+// 同一道题重复记录只保留最新一条：否则反复点按钮就能把通过率刷上去。
+service.recordHintOutcome({ platform: 'atcoder', key: 'abc999_z', outcome: 'solo' })
+const statsDup = service.hintStats()
+check('同题重复记录不累加条数', statsDup.total === 1 && statsDup.solo === 1 && statsDup.hinted === 0)
+service.recordHintOutcome({ platform: 'atcoder', key: 'abc999_z', outcome: 'hinted' })
+check('重复记录以最后一次为准', service.hintStats().hinted === 1)
+
 const soloDir = fs.mkdtempSync(path.join(os.tmpdir(), 'oi-knowledge-r4b-'))
 const soloStore = new KbStore({ dir: soloDir })
 const soloService = new KnowledgeService(soloStore)
@@ -104,10 +111,14 @@ service.addProblem({
   verdict: 'unsolved',
   statement: longStatement,
   essence: '差分前缀和的正负号变化次数就是答案。',
-  insights: [{ kind: 'observation', text: '一次操作只改变差分数组的一个位置。' }],
+  insights: [
+    { kind: 'observation', text: '一次操作只改变差分数组的一个位置。' },
+    { kind: 'direction', text: '先对原数组做差分，观察每次操作影响哪几个位置。' },
+  ],
 })
 const fb = await service.hintProblem({ platform: 'atcoder', key: 'abc999_w', level: 1 })
 check('模型空输出时 L1 有兜底', fb.unlocked === 1 && Boolean(fb.hints.l1))
+check('L1 兜底不泄露 observation（关键观察）', !String(fb.hints.l1).includes('只改变差分数组'))
 await service.hintProblem({ platform: 'atcoder', key: 'abc999_w', level: 2 })
 const fb3 = await service.hintProblem({ platform: 'atcoder', key: 'abc999_w', level: 3 })
 check('L3 兜底用精髓而不是报错', Boolean(fb3.hints.l3) && fb3.hints.l3.includes('差分'))

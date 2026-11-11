@@ -1,6 +1,6 @@
 {
   "name": "dsh-oi-knowledge",
-  "version": "1.3.43",
+  "version": "1.3.44",
   "description": "OI/ICPC 知识点树：把题目与题解拆成观察、套路、思路与坑点，维护可自检训练弱点的知识点树，并同步 Codeforces / AtCoder / 洛谷 账号。",
   "type": "module",
   "main": "index.js",
@@ -22,7 +22,7 @@
     "README.md"
   ],
   "scripts": {
-    "test": "node dev/smoke.mjs && node dev/regression.mjs && node dev/regression2.mjs && node dev/regression3.mjs && node dev/client-load.mjs && node dev/math-test.mjs"
+    "test": "node dev/smoke.mjs && node dev/regression.mjs && node dev/regression2.mjs && node dev/regression3.mjs && node dev/regression4.mjs && node dev/client-load.mjs && node dev/math-test.mjs"
   },
   "meta": {
     "title": "OI 知识点树",

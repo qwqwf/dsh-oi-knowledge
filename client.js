@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.43'
+    const CLIENT_BUILD = '1.3.44'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -275,6 +275,13 @@ window.__ModuleLoader__.load({
         if (typeof localStorage !== 'undefined') localStorage.setItem(QUIZ_RECENT_STORAGE, JSON.stringify(next))
       } catch (_) {}
       return next
+    }
+    function forgetQuizRecentOldest(count) {
+      const keep = quizRecentList().slice(0, Math.max(0, 60 - count))
+      try {
+        if (typeof localStorage !== 'undefined') localStorage.setItem(QUIZ_RECENT_STORAGE, JSON.stringify(keep))
+      } catch (_) {}
+      return keep
     }
     function clearQuizRecent() {
       try {
@@ -718,6 +725,20 @@ window.__ModuleLoader__.load({
       }
     }
 
+    function scheduleKatexRetry() {
+      if (katexRuntime.retryTimer) return
+      katexRuntime.retryTimer = setTimeout(() => {
+        katexRuntime.retryTimer = null
+        if (katexRuntime.status !== 'failed') return
+        katexRuntime.status = 'idle'
+        katexRuntime.promise = null
+        if (typeof window !== 'undefined' && window.katex && typeof window.katex.renderToString === 'function') {
+          katexRuntime.status = 'ready'
+        }
+        notifyKatexListeners()
+      }, 20000)
+    }
+
     function ensureKatex() {
       if (typeof window === 'undefined' || typeof document === 'undefined') return Promise.resolve(null)
       if (window.katex && typeof window.katex.renderToString === 'function') {
@@ -735,7 +756,14 @@ window.__ModuleLoader__.load({
         script.src = katexAssetUrl('katex.min.js').href
         script.async = true
         script.onload = () => {
-          katexRuntime.status = window.katex && typeof window.katex.renderToString === 'function' ? 'ready' : 'failed'
+          const ok = Boolean(window.katex && typeof window.katex.renderToString === 'function')
+          katexRuntime.status = ok ? 'ready' : 'failed'
+          // 静态资源返回 200 但内容不可执行（网关错误页/空文件）时也当失败处理，
+          // 否则 promise 会一直保持 resolved，整场会话都退化成纯文本公式。
+          if (!ok) {
+            katexRuntime.promise = null
+            scheduleKatexRetry()
+          }
           notifyKatexListeners()
           resolve(window.katex || null)
         }
@@ -745,18 +773,7 @@ window.__ModuleLoader__.load({
           notifyKatexListeners()
           resolve(null)
           // 失败不是终态：20 秒后允许重试，避免一次瞬时网络抖动让整场会话都没有公式。
-          if (!katexRuntime.retryTimer) {
-            katexRuntime.retryTimer = setTimeout(() => {
-              katexRuntime.retryTimer = null
-              if (katexRuntime.status === 'failed') {
-                katexRuntime.status = 'idle'
-                if (typeof window !== 'undefined' && window.katex) {
-                  katexRuntime.status = 'ready'
-                }
-                notifyKatexListeners()
-              }
-            }, 20000)
-          }
+          scheduleKatexRetry()
         }
         document.head.appendChild(script)
       })
@@ -1152,6 +1169,7 @@ window.__ModuleLoader__.load({
       const [hintSeconds, setHintSeconds] = React.useState(0)
       const [hintError, setHintError] = React.useState('')
       const [recorded, setRecorded] = React.useState('')
+      const [recording, setRecording] = React.useState('')
       const [hintStats, setHintStats] = React.useState(null)
       const preparing = !result || result.preparing === true
       const item = result ? result.item : null
@@ -1163,6 +1181,7 @@ window.__ModuleLoader__.load({
         setUnlocked(0)
         setHintError('')
         setRecorded('')
+        setRecording('')
         setHintStats(null)
       }, [itemKey])
 
@@ -1184,7 +1203,9 @@ window.__ModuleLoader__.load({
         let next = null
         let detail = ''
         try {
-          const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 120000))
+          // 服务端最坏是「抓题面 + 两次模型调用（90s + 12000 token 重试）」，留足耐心；
+          // 前端到点只是停止等待，后台请求仍会写完缓存。
+          const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 240000))
           next = await Promise.race([
             call(
               'hintProblem',
@@ -1221,14 +1242,24 @@ window.__ModuleLoader__.load({
 
       const recordOutcome = async (outcome) => {
         if (!item || recorded) return
-        const next = await call(
-          'recordHintOutcome',
-          { platform: item.platform, key: item.key, outcome },
-          { silent: true },
-        )
-        if (!next) return
-        setRecorded(outcome)
-        setHintStats(next.stats || null)
+        setRecording(outcome)
+        try {
+          const next = await call(
+            'recordHintOutcome',
+            { platform: item.platform, key: item.key, outcome },
+            { silent: true, throwOnError: true },
+          )
+          if (!next) {
+            setHintError('这次结果没记上（服务端没有返回），稍后再点一次。')
+            return
+          }
+          setRecorded(outcome)
+          setHintStats(next.stats || null)
+        } catch (error) {
+          setHintError(`这次结果没记上：${String((error && error.message) || error).slice(0, 160)}`)
+        } finally {
+          setRecording('')
+        }
       }
 
       const load = async (exclude) => {
@@ -1436,10 +1467,10 @@ window.__ModuleLoader__.load({
                       {
                         key: outcome,
                         tone: recorded === outcome ? 'primary' : 'normal',
-                        disabled: Boolean(recorded) && recorded !== outcome,
+                        disabled: Boolean(recording) || (Boolean(recorded) && recorded !== outcome),
                         onClick: () => recordOutcome(outcome),
                       },
-                      label,
+                      recording === outcome ? '记录中…' : label,
                     ),
                   ),
                 ),
@@ -1668,7 +1699,6 @@ window.__ModuleLoader__.load({
               const message = payload && payload.error ? payload.error : `HTTP ${response.status}`
               const failure = new Error(message)
               failure.status = response.status
-              if (options && options.throwOnError) throw failure
               throw failure
             }
             const result = payload.result || {}
@@ -3296,8 +3326,8 @@ window.__ModuleLoader__.load({
       // 抽题窗口（由服务端按 CF/AT 分数算出）。本地兜底也必须遵守，否则会混进旧的低分题。
       const ratingWindows = training.ratingWindows || {}
       const inWindow = (item) => {
-        const window = ratingWindows[item.platform]
-        if (!window) return true
+        // 服务端没读到该平台分数时回退 1200–2600；客户端用同一套回退，冷启动也不混进旧题。
+        const window = ratingWindows[item.platform] || { min: 1200, max: 2600 }
         const rating = Number(item.rating)
         return Number.isFinite(rating) && rating >= window.min && rating <= window.max
       }
@@ -3390,13 +3420,25 @@ window.__ModuleLoader__.load({
       const [quizKeys, setQuizKeys] = usePersisted('quizKeys', [])
       const [quizPreparing, setQuizPreparing] = React.useState(false)
 
+      const shuffle = (list) => {
+        const copy = list.slice()
+        for (let index = copy.length - 1; index > 0; index -= 1) {
+          const swap = Math.floor(Math.random() * (index + 1))
+          const value = copy[index]
+          copy[index] = copy[swap]
+          copy[swap] = value
+        }
+        return copy
+      }
+
       const pickBatch = () => {
         if (!eligibleQuizList.length) return []
         const recent = quizRecentList()
         const unseen = eligibleQuizList.filter((item) => !recent.includes(item.key))
-        if (unseen.length < 3) clearQuizRecent()
-        const pool = unseen.length >= 3 ? unseen : eligibleQuizList
-        const shuffled = pool.slice().sort(() => Math.random() - 0.5).slice(0, 3)
+        // 不足三题时只补记录，不再把所有「最近做过」清空（清空会让刚做过的题立刻重现）。
+        if (unseen.length < 3) forgetQuizRecentOldest(3 - unseen.length)
+        const pool = unseen.length ? unseen : eligibleQuizList
+        const shuffled = shuffle(pool).slice(0, 3)
         rememberQuizRecent(shuffled.map((item) => item.key))
         return shuffled.map((item) => item.key)
       }
