@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.37'
+    const CLIENT_BUILD = '1.3.38'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -3227,29 +3227,21 @@ window.__ModuleLoader__.load({
       const nextBatch = async () => {
         if (quizPreparing) return
         setQuizPreparing(true)
-        try {
-          const result = await call('sampleQuiz', { size: 3 }, { silent: true })
-          const keys = (result && result.items ? result.items : []).map((item) => item.key).filter(Boolean)
-          if (keys.length) {
-            setQuizKeys(keys)
-            rememberQuizRecent(keys)
-            resetQuizView()
-          } else {
-            const fallback = pickBatch()
-            if (fallback.length) {
-              setQuizKeys(fallback)
-              resetQuizView()
-            }
-          }
-        } catch (_) {
+        // call 内部已 try/catch，失败返回 null；这里按结果分支即可，不需要再包一层 catch。
+        const result = await call('sampleQuiz', { size: 3 }, { silent: true })
+        const keys = (result && result.items ? result.items : []).map((item) => item.key).filter(Boolean)
+        if (keys.length) {
+          setQuizKeys(keys)
+          rememberQuizRecent(keys)
+          resetQuizView()
+        } else {
           const fallback = pickBatch()
           if (fallback.length) {
             setQuizKeys(fallback)
             resetQuizView()
           }
-        } finally {
-          setQuizPreparing(false)
         }
+        setQuizPreparing(false)
       }
 
       const quizAttempts = (training.attempts || []).filter((item) => item.problemKey === quizKey)
@@ -3354,7 +3346,11 @@ window.__ModuleLoader__.load({
           if (matched) acTimes[matched[1]] = matched[2]
         }
         const result = await call('sessionFinish', { session: session.id, acTimes }, { silent: true })
-        if (result) setSessionResult(result)
+        if (result) {
+          setSessionResult(result)
+          // 结算后把本地 session 标成已结束，重挂载时「已结束」判断才成立。
+          setSession((current) => (current && current.id === session.id ? { ...current, endedAt: Date.now() } : current))
+        }
       }
 
       const quizItem = quizList.find((entry) => entry.key === quizKey) || null

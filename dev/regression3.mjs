@@ -104,6 +104,51 @@ const reviewKey = quizKey
 const review = service.trainReview({ problem: reviewKey, hit: true })
 check('人工复核命中时按待判轮次揭示', review.revealed === true, JSON.stringify(review).slice(0, 120))
 
+console.log('\n[P1-1] 已有洞察、没有精髓的题默认不被 digest 覆盖')
+service.addProblem({
+  platform: 'atcoder',
+  key: 'abc900_a',
+  title: 'Manual Insights',
+  rating: 1500,
+  pool: 'quiz',
+  verdict: 'unsolved',
+  statement: '给定一个长度为 N 的序列 A，求所有区间和的和。',
+  insights: [{ kind: 'observation', text: '把每个元素的贡献单独拆出来。' }],
+})
+const blockedDigest = await service.digestQuizProblems({ limit: 3 })
+check('空态提示默认不覆盖人工洞察', String(blockedDigest.summary).includes('默认不覆盖'), blockedDigest.summary)
+check('skipped 计数大于 0', blockedDigest.skipped >= 1, String(blockedDigest.skipped))
+
+console.log('\n[P2-2] pending 的 limit 生效')
+for (const key of ['abc901_b', 'abc901_c', 'abc901_d']) {
+  service.addProblem({
+    platform: 'atcoder',
+    key,
+    title: `Pending ${key}`,
+    rating: 1500,
+    pool: 'quiz',
+    verdict: 'unsolved',
+    statement: 'Given an array, answer the queries.',
+  })
+}
+store.mutate((kb) => {
+  kb.training.translateQueue = ['atcoder:abc901_b', 'atcoder:abc901_c', 'atcoder:abc901_d']
+})
+const pending = service.pendingTranslations({ limit: 2 })
+check('limit=2 只返回 2 道待译', pending.items.length === 2, `items=${pending.items.length}`)
+
+console.log('\n[P2-1] normalizeKb 保留并规范化 platformRatings')
+store.mutate((kb) => {
+  kb.meta.platformRatings = {
+    codeforces: { rating: 2385, fetchedAt: new Date().toISOString(), source: 'live' },
+    atcoder: { rating: '2296', fetchedAt: new Date().toISOString(), source: 'error', reason: 'timeout' },
+  }
+})
+const reloaded = new KbStore({ dir })
+const ratingsKept = reloaded.load().meta.platformRatings
+check('codeforces rating 保留', ratingsKept?.codeforces?.rating === 2385, JSON.stringify(ratingsKept?.codeforces))
+check('atcoder 字符串 rating 被规范化成数字', ratingsKept?.atcoder?.rating === 2296, JSON.stringify(ratingsKept?.atcoder))
+
 fs.rmSync(dir, { recursive: true, force: true })
 console.log(`\n${failed ? 'FAILED' : 'ALL PASS'}：${passed} passed, ${failed} failed`)
 process.exitCode = failed ? 1 : 0

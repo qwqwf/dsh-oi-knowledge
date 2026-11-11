@@ -384,10 +384,14 @@ function registerTools(ctx, service) {
         '  grade — 记录成绩（problem + result: hit1/hit2/miss）；',
         '  session_start / session_touch / session_finish — 组卷：开始、记开题时间、结算（acTimes 传 key→时间戳）；',
         '  stats — 召回率与方向命中统计；',
-        '  sample — 面板用：从本地已译题库抽一批中文新题（不足会提示补货）；',
-        '  refill — 补货：从 AtCoder/Codeforces 原库抽新题、抓英文题面入库，把原文返回给模型翻译，翻好用 oi_problem update 回填；',
-        '  repair — 补抓 quiz 池里题面缺失的题（走宿主 web 抓取并翻成中文）。',
-        '  digest — 给 quiz 池里还没写精髓的题补精髓与 3–5 条洞察（limit 默认 6）。',
+        '  sample — 面板用：按平台分数 +200~+400 实时抽新题，抓题面、翻成中文并补精髓；',
+        '  refill — 补货：抽新题抓英文题面入库（不翻译），原文返回给模型翻译，翻好用 oi_problem update 回填；',
+        '  repair — 补抓 quiz 池里题面缺失或中文缺失的题（走宿主抓取并翻成中文）；',
+        '  digest — 给 quiz 池里还没写精髓的题补精髓与 3–5 条洞察（limit 1–8 默认 6；有手写洞察的题默认跳过，overwrite=true 才覆盖并备份）；',
+        '  pending — 列出翻译队列里的题（含英文题面），limit 默认 6；',
+        '  apply_zh — 回填中文题意（items: [{ref, zh, titleZh}]）；',
+        '  probe — 探测翻译通道（translator / llm）是否可用；',
+        '  ratings — 读取并缓存 CF / AtCoder 分数（force=true 强制刷新），返回抽题窗口。',
         '面板提交思路时会自动调用 judge；review 留给对话里的人工复核。',
       ].join('\n'),
       parameters: {
@@ -419,7 +423,8 @@ function registerTools(ctx, service) {
             description: 'session_finish：题号 → AC 时间（ISO 或毫秒时间戳）',
           },
           size: { type: 'number', description: 'sample：抽几道新题（1–6，默认 3）' },
-          limit: { type: 'number', description: 'digest：这次最多补几道（1–20，默认 6）' },
+          limit: { type: 'number', description: 'pending：列出几条待译（1–20，默认 6）；digest：这次最多补几道（1–8，默认 6）' },
+          overwrite: { type: 'boolean', description: 'digest：已有手写洞察的题是否覆盖（默认 false，覆盖前备份到 digestBackup）' },
           items: {
             type: 'array',
             description: 'apply_zh：回填中文题意，元素形如 { ref: "atcoder:abc123_f", zh: "…", titleZh: "…" }',
@@ -450,7 +455,7 @@ function registerTools(ctx, service) {
                 if (!row || !Number.isFinite(row.rating)) {
                   return `${label}：没读到分数${row && row.reason ? `（${row.reason}）` : ''}`
                 }
-                const window = `${row.rating + 200}–${row.rating + 400}`
+                const window = `${Math.max(800, Math.round(row.rating) + 200)}–${Math.min(4000, Math.round(row.rating) + 400)}`
                 return `${label}：**${row.rating}** 分（${row.source === 'live' ? '刚拉取' : '缓存'}${row.fetchedAt ? `，${String(row.fetchedAt).slice(0, 16).replace('T', ' ')}` : ''}）→ 抽题窗口 ${window}`
               }
               return toolOk({
@@ -459,7 +464,7 @@ function registerTools(ctx, service) {
               })
             }
             case 'pending':
-              return toolOk(service.pendingTranslations({ limit: args.size }))
+              return toolOk(service.pendingTranslations({ limit: args.limit }))
             case 'apply_zh':
               return toolOk(service.applyTranslations({ items: args.items }))
             case 'card':
@@ -490,7 +495,7 @@ function registerTools(ctx, service) {
               return toolOk(await service.repairQuizStatements())
             case 'digest':
               // 给 quiz 池里还没写精髓的题补精髓与洞察。
-              return toolOk(await service.digestQuizProblems({ limit: args.limit }))
+              return toolOk(await service.digestQuizProblems({ limit: args.limit, overwrite: args.overwrite === true }))
             case 'refill':
               // 补货：抽新题、抓英文题面入库，把英文原文返回给模型翻译；翻好后用 oi_problem update 回填中文。
               return toolOk(await service.sampleQuiz({ size: args.size || 6, deferTranslate: true }))
