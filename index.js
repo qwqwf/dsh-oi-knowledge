@@ -397,8 +397,9 @@ function registerTools(ctx, service) {
         properties: {
           action: {
             type: 'string',
-            enum: ['card', 'mark', 'attempt', 'judge', 'review', 'reveal', 'grade', 'session_start', 'session_touch', 'session_finish', 'stats', 'sample', 'repair', 'digest', 'refill', 'probe', 'pending', 'apply_zh'],
+            enum: ['card', 'mark', 'attempt', 'judge', 'review', 'reveal', 'grade', 'session_start', 'session_touch', 'session_finish', 'stats', 'sample', 'repair', 'digest', 'refill', 'probe', 'pending', 'apply_zh', 'ratings'],
           },
+          force: { type: 'boolean', description: 'ratings：忽略缓存，强制重新拉取 CF / AtCoder 分数' },
           kind: { type: 'string', enum: ['pattern', 'problem'], description: 'card：卡片类型' },
           node: { type: 'string', description: 'card：限定某个观察节点' },
           cardId: { type: 'string', description: 'mark：闪卡 id' },
@@ -442,6 +443,21 @@ function registerTools(ctx, service) {
           switch (args.action) {
             case 'probe':
               return toolOk(await service.probeTranslate({ text: args.text }))
+            case 'ratings': {
+              const ratings = await service.platformRatings({ force: args.force === true })
+              const lineOf = (platform, label) => {
+                const row = ratings[platform]
+                if (!row || !Number.isFinite(row.rating)) {
+                  return `${label}：没读到分数${row && row.reason ? `（${row.reason}）` : ''}`
+                }
+                const window = `${row.rating + 200}–${row.rating + 400}`
+                return `${label}：**${row.rating}** 分（${row.source === 'live' ? '刚拉取' : '缓存'}${row.fetchedAt ? `，${String(row.fetchedAt).slice(0, 16).replace('T', ' ')}` : ''}）→ 抽题窗口 ${window}`
+              }
+              return toolOk({
+                summary: ['## 平台分数', lineOf('codeforces', 'Codeforces'), lineOf('atcoder', 'AtCoder')].join('\n'),
+                ratings,
+              })
+            }
             case 'pending':
               return toolOk(service.pendingTranslations({ limit: args.size }))
             case 'apply_zh':

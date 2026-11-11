@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.32'
+    const CLIENT_BUILD = '1.3.37'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -1243,17 +1243,33 @@ window.__ModuleLoader__.load({
                   h(Pill, { key: tag, color: C.muted }, tag),
                 ),
               ),
-              item.nodes && item.nodes.length
+              item.facets
                 ? h(
                     'div',
-                    { style: { fontSize: 11.5, color: C.muted, marginTop: 8, lineHeight: 1.7 } },
-                    `对应知识点：${item.nodes.join('、')}`,
+                    { style: { fontSize: 11.5, color: C.muted, marginTop: 8, lineHeight: 1.8 } },
+                    [
+                      ['knowledge', '知识点'],
+                      ['idea', '思路'],
+                      ['observation', '观察'],
+                    ].map(([kind, label]) => {
+                      const list = item.facets[kind] || []
+                      const text = list.length
+                        ? list.map((entry) => `${entry.path}（${LEVEL_LABEL[entry.level] || '—'}）`).join('、')
+                        : '这一维没有命中'
+                      return h('div', { key: kind }, `${label}：${text}`)
+                    }),
                   )
-                : null,
+                : item.nodes && item.nodes.length
+                  ? h(
+                      'div',
+                      { style: { fontSize: 11.5, color: C.muted, marginTop: 8, lineHeight: 1.7 } },
+                      `对应知识点：${item.nodes.join('、')}`,
+                    )
+                  : null,
               h(
                 'div',
                 { style: { fontSize: 11.5, color: C.muted, marginTop: 6, lineHeight: 1.7 } },
-                '判断依据：Codeforces 用题目自带标签，AtCoder 没有官方标签，用题面与题解里的关键词对照知识点名称/别名，命中词最多的最弱分支优先；难度窗口按你已通过题的中位/75 分位自动推。',
+                '判断依据：三棵树分别取档位（知识点看掌握度、思路看洞察数、观察看句式证据），先比三维里最弱的一档，再比三档之和，最后看命中权重；难度窗口按你当前 CF / AtCoder 分数 +200~+400 自动取。',
               ),
               h(
                 'div',
@@ -1395,6 +1411,27 @@ window.__ModuleLoader__.load({
 
     // ── 数据上下文 ───────────────────────────────────────────────────────
     const StoreContext = React.createContext(null)
+
+    // 跨页签/重挂载保存训练页状态：Panel 只渲染当前 tab，TrainingTab 卸载后草稿会丢。
+    function usePersisted(key, initial) {
+      const storageKey = `oi-knowledge:train:${key}`
+      const [value, setValue] = React.useState(() => {
+        try {
+          const raw = window.localStorage.getItem(storageKey)
+          return raw == null ? initial : JSON.parse(raw)
+        } catch (_) {
+          return initial
+        }
+      })
+      React.useEffect(() => {
+        try {
+          window.localStorage.setItem(storageKey, JSON.stringify(value))
+        } catch (_) {
+          /* 隐私模式/配额满了就算了，纯体验优化 */
+        }
+      }, [storageKey, value])
+      return [value, setValue]
+    }
 
     function useStore() {
       const value = React.useContext(StoreContext)
@@ -3079,11 +3116,12 @@ window.__ModuleLoader__.load({
       const [cardLoading, setCardLoading] = React.useState(false)
       const [marking, setMarking] = React.useState(false)
 
-      const [quizKey, setQuizKey] = React.useState('')
-      const [draft, setDraft] = React.useState('')
-      const [quizStartedAt, setQuizStartedAt] = React.useState(0)
-      const [quizFeedback, setQuizFeedback] = React.useState(null)
-      const [quizRevealed, setQuizRevealed] = React.useState(false)
+      const [quizKey, setQuizKey] = usePersisted('quizKey', '')
+      const [draft, setDraft] = usePersisted('draft', '')
+      const [quizStartedAt, setQuizStartedAt] = usePersisted('quizStartedAt', 0)
+      const [quizFeedback, setQuizFeedback] = usePersisted('quizFeedback', null)
+      const [quizRevealed, setQuizRevealed] = usePersisted('quizRevealed', false)
+      const [pendingJudge, setPendingJudge] = usePersisted('pendingJudge', null)
       const [submitting, setSubmitting] = React.useState(false)
       const [repairing, setRepairing] = React.useState(false)
       const [now, setNow] = React.useState(Date.now())
@@ -3098,10 +3136,10 @@ window.__ModuleLoader__.load({
         }
       }
 
-      const [session, setSession] = React.useState(sessions.length ? sessions[sessions.length - 1] : null)
-      const [sessionKeys, setSessionKeys] = React.useState('')
-      const [acText, setAcText] = React.useState('')
-      const [sessionResult, setSessionResult] = React.useState(null)
+      const [session, setSession] = usePersisted('session', sessions.length ? sessions[sessions.length - 1] : null)
+      const [sessionKeys, setSessionKeys] = usePersisted('sessionKeys', '')
+      const [acText, setAcText] = usePersisted('acText', '')
+      const [sessionResult, setSessionResult] = usePersisted('sessionResult', null)
 
       React.useEffect(() => {
         const timer = setInterval(() => setNow(Date.now()), 1000)
@@ -3152,10 +3190,11 @@ window.__ModuleLoader__.load({
         setDraft('')
         setQuizFeedback(null)
         setQuizRevealed(false)
+        setPendingJudge(null)
         setQuizStartedAt(Date.now())
       }
 
-      const [quizKeys, setQuizKeys] = React.useState([])
+      const [quizKeys, setQuizKeys] = usePersisted('quizKeys', [])
       const [quizPreparing, setQuizPreparing] = React.useState(false)
 
       const pickBatch = () => {
@@ -3180,6 +3219,7 @@ window.__ModuleLoader__.load({
         setDraft('')
         setQuizFeedback(null)
         setQuizRevealed(false)
+        setPendingJudge(null)
         setQuizStartedAt(0)
       }
 
@@ -3214,6 +3254,16 @@ window.__ModuleLoader__.load({
 
       const quizAttempts = (training.attempts || []).filter((item) => item.problemKey === quizKey)
 
+      const applyJudge = (judge, text) => {
+        setQuizFeedback({
+          tone: judge.hit ? 'success' : judge.revealed ? 'warn' : 'idle',
+          text: judge.summary || '已记录这轮思路。',
+        })
+        if (judge.revealed) setQuizRevealed(true)
+        // 只清掉这次提交的文本；请求期间用户新打的字不动。
+        setDraft((current) => (current.trim() === text ? '' : current))
+      }
+
       const submitAttempt = async () => {
         if (submitting) return
         const item = quizList.find((entry) => entry.key === quizKey)
@@ -3222,23 +3272,26 @@ window.__ModuleLoader__.load({
         setSubmitting(true)
         const ms = quizStartedAt ? Date.now() - quizStartedAt : undefined
         try {
-          const attempt = await call('trainAttempt', { problem: item.key, text, ms }, { silent: true })
-          if (!attempt) {
-            setQuizFeedback({ tone: 'warn', text: '这轮思路没存上（服务端/网络错误），文字还在输入框里，再提交一次。' })
-            return
+          // 判定失败后的「再提交一次」只重试 judge：不能再造一条 attempt，否则 pendingRound 会把 round 顶到 2、提前揭示真值。
+          const retry = pendingJudge && pendingJudge.key === item.key && pendingJudge.text === text
+          if (!retry) {
+            const attempt = await call('trainAttempt', { problem: item.key, text, ms }, { silent: true })
+            if (!attempt) {
+              setQuizFeedback({ tone: 'warn', text: '这轮思路没存上（服务端/网络错误），文字还在输入框里，再提交一次。' })
+              return
+            }
+            // 轮次显式传：按「已判分的轮数 + 1」，重试不会把同一轮算成第二轮。
+            const graded = quizAttempts.filter((entry) => entry.result).length
+            setPendingJudge({ key: item.key, text, round: Math.min(2, graded + 1) })
           }
-          const judge = await call('trainJudge', { problem: item.key, text }, { silent: true })
+          const round = retry ? pendingJudge.round : Math.min(2, quizAttempts.filter((entry) => entry.result).length + 1)
+          const judge = await call('trainJudge', { problem: item.key, text, round }, { silent: true })
           if (!judge) {
-            setQuizFeedback({ tone: 'warn', text: '思路已记录，但判定没返回，稍等一下再提交一次。' })
+            setQuizFeedback({ tone: 'warn', text: '思路已记录，但判定没返回；再点一次「提交」只会重试判定，不会多算一轮。' })
             return
           }
-          setQuizFeedback({
-            tone: judge.hit ? 'success' : judge.revealed ? 'warn' : 'idle',
-            text: judge.summary || '已记录这轮思路。',
-          })
-          if (judge.revealed) setQuizRevealed(true)
-          // 只清掉这次提交的文本；请求期间用户新打的字不动。
-          setDraft((current) => (current.trim() === text ? '' : current))
+          setPendingJudge(null)
+          applyJudge(judge, text)
         } finally {
           setSubmitting(false)
         }
