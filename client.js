@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.40'
+    const CLIENT_BUILD = '1.3.41'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -1149,6 +1149,7 @@ window.__ModuleLoader__.load({
       const [hints, setHints] = React.useState({})
       const [unlocked, setUnlocked] = React.useState(0)
       const [hintLoading, setHintLoading] = React.useState(0)
+      const [hintSeconds, setHintSeconds] = React.useState(0)
       const [hintError, setHintError] = React.useState('')
       const [recorded, setRecorded] = React.useState('')
       const [hintStats, setHintStats] = React.useState(null)
@@ -1165,18 +1166,47 @@ window.__ModuleLoader__.load({
         setHintStats(null)
       }, [itemKey])
 
+      React.useEffect(() => {
+        if (!hintLoading) {
+          setHintSeconds(0)
+          return undefined
+        }
+        const started = Date.now()
+        setHintSeconds(0)
+        const timer = setInterval(() => setHintSeconds(Math.round((Date.now() - started) / 1000)), 1000)
+        return () => clearInterval(timer)
+      }, [hintLoading])
+
       const askHint = async (level) => {
         if (!item || hintLoading) return
         setHintLoading(level)
         setHintError('')
-        const next = await call(
-          'hintProblem',
-          { platform: item.platform, key: item.key, title: item.title, url: item.url, hintLevel: level },
-          { silent: true },
-        )
-        setHintLoading(0)
+        let next = null
+        try {
+          const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 75000))
+          next = await Promise.race([
+            call(
+              'hintProblem',
+              {
+                platform: item.platform,
+                key: item.key,
+                title: item.titleZh || item.title,
+                url: item.url,
+                hintLevel: level,
+                statement: item.statement || '',
+                truth: item.truth || '',
+              },
+              { silent: true },
+            ),
+            timeout,
+          ])
+        } catch (error) {
+          next = null
+        } finally {
+          setHintLoading(0)
+        }
         if (!next) {
-          setHintError('这一级提示没能生成（题面没抓到或模型没返回），稍后再试。')
+          setHintError('这一级提示没能生成（题面没抓到、模型超时，或请求中断），稍后再试；已经解锁的级别不会丢。')
           return
         }
         setHints(next.hints || {})
@@ -1338,13 +1368,49 @@ window.__ModuleLoader__.load({
                 unlocked < 3
                   ? h(
                       'div',
-                      { style: { marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' } },
+                      { style: { marginTop: 10 } },
                       h(
-                        Btn,
-                        { tone: unlocked === 0 ? 'primary' : 'normal', onClick: () => askHint(unlocked + 1), disabled: Boolean(hintLoading) },
-                        hintLoading ? '正在生成提示…' : `解锁 L${unlocked + 1}`,
+                        'div',
+                        { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
+                        h(
+                          Btn,
+                          { tone: unlocked === 0 ? 'primary' : 'normal', onClick: () => askHint(unlocked + 1), disabled: Boolean(hintLoading) },
+                          hintLoading ? `正在生成 L${hintLoading}…` : `解锁 L${unlocked + 1}`,
+                        ),
+                        hintLoading
+                          ? h(
+                              'span',
+                              { style: { fontSize: 11.5, color: C.brand } },
+                              `已等 ${hintSeconds}s · ${hintSeconds < 20 ? '抓题面 + 模型生成中，通常 10–30 秒' : '模型有点慢，还可以再等等，或关掉稍后重试'}`,
+                            )
+                          : h(
+                              'span',
+                              { style: { fontSize: 11.5, color: C.muted } },
+                              unlocked === 0 ? '先自己写两句方向，再点这个' : '想清楚了再解锁下一级',
+                            ),
+                        hintLoading
+                          ? h(
+                              'span',
+                              { style: { fontSize: 11.5, color: C.muted } },
+                              h(
+                                'button',
+                                {
+                                  type: 'button',
+                                  onClick: () => setHintLoading(0),
+                                  style: { border: 'none', background: 'transparent', color: C.muted, cursor: 'pointer', padding: 0, textDecoration: 'underline', fontSize: 11.5 },
+                                },
+                                '取消等待',
+                              ),
+                            )
+                          : null,
                       ),
-                      h('span', { style: { fontSize: 11.5, color: C.muted } }, unlocked === 0 ? '先自己写两句方向，再点这个' : '想清楚了再解锁下一级'),
+                      hintLoading
+                        ? h(
+                            'div',
+                            { style: { fontSize: 11.5, color: C.muted, marginTop: 6, lineHeight: 1.7 } },
+                            '提示只生成这一级；已经等太久的话可以关掉重开，已解锁的级别不会丢。',
+                          )
+                        : null,
                     )
                   : null,
                 hintError

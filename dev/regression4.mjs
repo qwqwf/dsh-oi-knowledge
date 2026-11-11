@@ -41,15 +41,20 @@ service.addProblem({
   ],
 })
 
-setHostGenerate(async () => [
-  'L1：看相邻元素的差。',
-  'L2：把一次操作换成差分数组上的加减。',
-  'L3：答案只和差分前缀和的正负号变化有关。',
-].join('\n'))
+let genCalls = 0
+setHostGenerate(async () => {
+  genCalls += 1
+  return [
+    'L1：看相邻元素的差。',
+    'L2：把一次操作换成差分数组上的加减。',
+    'L3：答案只和差分前缀和的正负号变化有关。',
+  ].join('\n')
+})
 
 console.log('\n[提示] 逐级解锁')
 const first = await service.hintProblem({ platform: 'atcoder', key: 'abc999_z', level: 1 })
 check('L1 生成并解锁', first.unlocked === 1 && Boolean(first.hints.l1), JSON.stringify(first).slice(0, 160))
+check('一次请求只生成一级', genCalls === 1)
 check('L1 不泄露 L2/L3', !first.hints.l2 && !first.hints.l3)
 const second = await service.hintProblem({ platform: 'atcoder', key: 'abc999_z', level: 2 })
 check('L2 解锁后带 L1+L2', second.unlocked === 2 && Boolean(second.hints.l1) && Boolean(second.hints.l2))
@@ -76,6 +81,13 @@ soloService.addProblem({ platform: 'atcoder', key: 'abc999_y', title: 'Solo', ra
 soloService.recordHintOutcome({ platform: 'atcoder', key: 'abc999_y', outcome: 'solo' })
 const stats2 = soloService.hintStats()
 check('零提示独立做出计入通过率', stats2.soloZero === 1 && stats2.zeroHintRate === 100)
+
+console.log('\n[提示] 不允许跳级')
+soloService.addProblem({ platform: 'atcoder', key: 'abc999_x', title: 'Jump', rating: 2400, pool: 'quiz', verdict: 'unsolved', statement: longStatement })
+const jumpBefore = genCalls
+const jump = await soloService.hintProblem({ platform: 'atcoder', key: 'abc999_x', level: 3 })
+check('直接点 L3 也只解锁到 L1', jump.unlocked === 1 && Boolean(jump.hints.l1) && !jump.hints.l2)
+check('跳级请求也只生成一级', genCalls === jumpBefore + 1)
 
 console.log('\n[提示] 校验与异常')
 let threw = ''
