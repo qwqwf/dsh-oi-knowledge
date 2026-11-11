@@ -392,6 +392,8 @@ function registerTools(ctx, service) {
         '  apply_zh — 回填中文题意（items: [{ref, zh, titleZh}]）；',
         '  probe — 探测翻译通道（translator / llm）是否可用；',
         '  ratings — 读取并缓存 CF / AtCoder 分数（force=true 强制刷新），返回抽题窗口。',
+        '  hint — 薄弱题三级提示：platform + key（+title/url，弱题不在库里时用于抓题面），hintLevel=1/2/3 逐级解锁；返回已解锁内容并记住解锁到第几级；',
+        '  hint_result — 记录这道题最终怎么做出来的：platform + key + outcome（solo 独立做出 / hinted 看提示做出 / failed 没做出），用于统计零提示通过率。',
         '面板提交思路时会自动调用 judge；review 留给对话里的人工复核。',
       ].join('\n'),
       parameters: {
@@ -401,9 +403,15 @@ function registerTools(ctx, service) {
         properties: {
           action: {
             type: 'string',
-            enum: ['card', 'mark', 'attempt', 'judge', 'review', 'reveal', 'grade', 'session_start', 'session_touch', 'session_finish', 'stats', 'sample', 'repair', 'digest', 'refill', 'probe', 'pending', 'apply_zh', 'ratings'],
+            enum: ['card', 'mark', 'attempt', 'judge', 'review', 'reveal', 'grade', 'session_start', 'session_touch', 'session_finish', 'stats', 'sample', 'repair', 'digest', 'refill', 'probe', 'pending', 'apply_zh', 'ratings', 'hint', 'hint_result'],
           },
           force: { type: 'boolean', description: 'ratings：忽略缓存，强制重新拉取 CF / AtCoder 分数' },
+          platform: { type: 'string', enum: ['atcoder', 'codeforces'], description: 'hint / hint_result：题目平台' },
+          key: { type: 'string', description: 'hint / hint_result：题号，如 abc278_g 或 1260F' },
+          hintLevel: { type: 'number', description: 'hint：解锁到第几级（1–3；0 只查询已解锁内容）' },
+          outcome: { type: 'string', enum: ['solo', 'hinted', 'failed'], description: 'hint_result：独立做出 / 看提示做出 / 没做出' },
+          title: { type: 'string', description: 'hint：题目标题（弱题不在库里时用于抓题面）' },
+          url: { type: 'string', description: 'hint：题目链接（可选）' },
           kind: { type: 'string', enum: ['pattern', 'problem'], description: 'card：卡片类型' },
           node: { type: 'string', description: 'card：限定某个观察节点' },
           cardId: { type: 'string', description: 'mark：闪卡 id' },
@@ -465,6 +473,24 @@ function registerTools(ctx, service) {
             }
             case 'pending':
               return toolOk(service.pendingTranslations({ limit: args.limit }))
+            case 'hint':
+              return toolOk(
+                await service.hintProblem({
+                  platform: args.platform,
+                  key: args.key || args.problem,
+                  title: args.title,
+                  url: args.url,
+                  level: args.hintLevel,
+                }),
+              )
+            case 'hint_result':
+              return toolOk(
+                service.recordHintOutcome({
+                  platform: args.platform,
+                  key: args.key || args.problem,
+                  outcome: args.outcome,
+                }),
+              )
             case 'apply_zh':
               return toolOk(service.applyTranslations({ items: args.items }))
             case 'card':

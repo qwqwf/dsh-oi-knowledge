@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.39'
+    const CLIENT_BUILD = '1.3.40'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -1146,9 +1146,54 @@ window.__ModuleLoader__.load({
       const [loading, setLoading] = React.useState(false)
       const [error, setError] = React.useState('')
       const [seen, setSeen] = React.useState(weakSeenList())
+      const [hints, setHints] = React.useState({})
+      const [unlocked, setUnlocked] = React.useState(0)
+      const [hintLoading, setHintLoading] = React.useState(0)
+      const [hintError, setHintError] = React.useState('')
+      const [recorded, setRecorded] = React.useState('')
+      const [hintStats, setHintStats] = React.useState(null)
       const preparing = !result || result.preparing === true
       const item = result ? result.item : null
       const weak = result ? result.weak : null
+      const itemKey = item ? `${item.platform}:${item.key}` : ''
+
+      React.useEffect(() => {
+        setHints({})
+        setUnlocked(0)
+        setHintError('')
+        setRecorded('')
+        setHintStats(null)
+      }, [itemKey])
+
+      const askHint = async (level) => {
+        if (!item || hintLoading) return
+        setHintLoading(level)
+        setHintError('')
+        const next = await call(
+          'hintProblem',
+          { platform: item.platform, key: item.key, title: item.title, url: item.url, hintLevel: level },
+          { silent: true },
+        )
+        setHintLoading(0)
+        if (!next) {
+          setHintError('这一级提示没能生成（题面没抓到或模型没返回），稍后再试。')
+          return
+        }
+        setHints(next.hints || {})
+        setUnlocked(next.unlocked || 0)
+      }
+
+      const recordOutcome = async (outcome) => {
+        if (!item || recorded) return
+        const next = await call(
+          'recordHintOutcome',
+          { platform: item.platform, key: item.key, outcome },
+          { silent: true },
+        )
+        if (!next) return
+        setRecorded(outcome)
+        setHintStats(next.stats || null)
+      }
 
       const load = async (exclude) => {
         setLoading(true)
@@ -1270,6 +1315,69 @@ window.__ModuleLoader__.load({
                 'div',
                 { style: { fontSize: 11.5, color: C.muted, marginTop: 6, lineHeight: 1.7 } },
                 '判断依据：三棵树分别取档位（知识点看掌握度、思路看洞察数、观察看句式证据），先比三维里最弱的一档，再比三档之和，最后看命中权重；难度窗口按你当前 CF / AtCoder 分数 +200~+400 自动取。',
+              ),
+              h(
+                'div',
+                { style: { marginTop: 12, borderTop: `1px dashed ${C.border}`, paddingTop: 10 } },
+                h('div', { style: { fontSize: 12.5, fontWeight: 600 } }, '三级提示 · 自己先想，卡住再点'),
+                h(
+                  'div',
+                  { style: { fontSize: 11.5, color: C.muted, marginTop: 4, lineHeight: 1.7 } },
+                  'L1 只说该看哪个结构，L2 说转化方向，L3 才点破关键观察；系统会记住这道题解锁到第几级。',
+                ),
+                [1, 2, 3].map((level) =>
+                  unlocked >= level
+                    ? h(
+                        'div',
+                        { key: level, style: { marginTop: 9, fontSize: 12.5, lineHeight: 1.8 } },
+                        h('div', { style: { fontWeight: 600, color: C.brand } }, ['', 'L1 · 看哪个结构', 'L2 · 转化方向', 'L3 · 关键观察'][level]),
+                        h(RichLines, { text: hints[`l${level}`] || '' }),
+                      )
+                    : null,
+                ),
+                unlocked < 3
+                  ? h(
+                      'div',
+                      { style: { marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' } },
+                      h(
+                        Btn,
+                        { tone: unlocked === 0 ? 'primary' : 'normal', onClick: () => askHint(unlocked + 1), disabled: Boolean(hintLoading) },
+                        hintLoading ? '正在生成提示…' : `解锁 L${unlocked + 1}`,
+                      ),
+                      h('span', { style: { fontSize: 11.5, color: C.muted } }, unlocked === 0 ? '先自己写两句方向，再点这个' : '想清楚了再解锁下一级'),
+                    )
+                  : null,
+                hintError
+                  ? h('div', { style: { fontSize: 11.5, color: C.error, marginTop: 8, lineHeight: 1.7 } }, hintError)
+                  : null,
+                h('div', { style: { marginTop: 12, fontSize: 12.5, fontWeight: 600 } }, '这题最后是怎么做出来的？'),
+                h(
+                  'div',
+                  { style: { marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' } },
+                  [
+                    ['solo', '独立做出'],
+                    ['hinted', '看提示做出'],
+                    ['failed', '没做出'],
+                  ].map(([outcome, label]) =>
+                    h(
+                      Btn,
+                      {
+                        key: outcome,
+                        tone: recorded === outcome ? 'primary' : 'normal',
+                        disabled: Boolean(recorded) && recorded !== outcome,
+                        onClick: () => recordOutcome(outcome),
+                      },
+                      label,
+                    ),
+                  ),
+                ),
+                recorded
+                  ? h(
+                      'div',
+                      { style: { fontSize: 11.5, color: C.muted, marginTop: 8, lineHeight: 1.7 } },
+                      `已记录。${hintStats ? `零提示通过率 ${hintStats.zeroHintRate == null ? '—' : `${hintStats.zeroHintRate}%`}（共 ${hintStats.total} 条记录）` : ''}`,
+                    )
+                  : null,
               ),
               h(
                 'div',
