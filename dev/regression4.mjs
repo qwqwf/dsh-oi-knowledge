@@ -55,6 +55,10 @@ console.log('\n[提示] 逐级解锁')
 const first = await service.hintProblem({ platform: 'atcoder', key: 'abc999_z', level: 1 })
 check('L1 生成并解锁', first.unlocked === 1 && Boolean(first.hints.l1), JSON.stringify(first).slice(0, 160))
 check('一次请求只生成一级', genCalls === 1)
+const partial = (store.load().training.hints || {})['atcoder:abc999_z'] || {}
+check('只生成了 L1 时缓存重载后仍在', Boolean(partial.l1) && !partial.l2 && !partial.l3)
+const sourceSaved = (store.load().training.hintSources || {})['atcoder:abc999_z']
+check('题面原文已缓存（L2/L3 不再重抓）', Boolean(sourceSaved && sourceSaved.statement && sourceSaved.statement.length >= 80))
 check('L1 不泄露 L2/L3', !first.hints.l2 && !first.hints.l3)
 const second = await service.hintProblem({ platform: 'atcoder', key: 'abc999_z', level: 2 })
 check('L2 解锁后带 L1+L2', second.unlocked === 2 && Boolean(second.hints.l1) && Boolean(second.hints.l2))
