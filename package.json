@@ -21,6 +21,9 @@
     "cordis.patch.yml",
     "README.md"
   ],
+  "scripts": {
+    "test": "node dev/smoke.mjs && node dev/regression.mjs && node dev/regression2.mjs && node dev/regression3.mjs && node dev/client-load.mjs && node dev/math-test.mjs"
+  },
   "meta": {
     "title": "OI 知识点树",
     "description": "把做过的题拆成观察、套路、思路与坑点，维护可自检弱点的知识点树，并同步 Codeforces / AtCoder / 洛谷 账号。"
