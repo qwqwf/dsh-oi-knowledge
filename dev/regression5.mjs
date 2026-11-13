@@ -33,11 +33,12 @@ setHostTranslate(async (text) => {
 })
 setHostGenerate(async () => [
   '精髓：答案只与相邻两项的差分有关，把差分统一到同一个值即可。',
-  '观察：所有相邻差最终都相等，等价于差分数组只有一种非零值。',
-  '套路：把区间操作转成差分数组上的单点修改。',
-  '思路：先算出每个位置的差分，再分别统计正负差的数量。',
+  '观察：所有相邻差最终都相等，等价于差分数组只有一种非零值。【挂：观察/转化与化归/差分与前缀】',
+  '套路：把区间操作转成差分数组上的单点修改。【挂：思路/数据结构与离线/差分与前缀】',
+  '思路：先算出每个位置的差分，再分别统计正负差的数量。【挂：基础与实现/前缀和与差分】',
   '方向：看到「相邻差」先写差分，再看操作在差分上长什么样。',
   '坑点：差分可以为负，统计时不要漏掉负方向。',
+  '标签：dp, binary search',
 ].join('\n'))
 
 const created = await service.digestProblem({
@@ -60,6 +61,29 @@ check('洞察类型齐全', Boolean(problem) && problem.insights.some((i) => i.k
 check('洞察带 id', Boolean(problem) && problem.insights.every((i) => Boolean(i.id)))
 check('英文题面自动补中文题意', Boolean(problem) && problem.statementZh.length >= 40)
 check('洞察挂到知识点/思路/观察', Boolean(problem) && problem.insights.some((i) => (i.nodes || []).length > 0 || (i.obsNodes || []).length > 0) && problem.nodes.length > 0)
+
+const obsNode = saved.obsNodes.find((node) => node.name === '差分与前缀' && node.parent)
+const ideaNode = saved.nodes.find((node) => node.tree === 'idea' && node.name === '差分与前缀')
+const knowledgeNode = saved.nodes.find((node) => node.tree !== 'idea' && node.name === '前缀和与差分')
+const observationInsight = problem?.insights.find((i) => i.kind === 'observation')
+const trickInsight = problem?.insights.find((i) => i.kind === 'trick')
+const knowledgeInsight = problem?.insights.find((i) => i.kind === 'idea')
+check(
+  '模型标注的挂载被采用（观察）',
+  Boolean(observationInsight && obsNode) && (observationInsight.obsNodes || []).includes(obsNode.id),
+  observationInsight && obsNode ? JSON.stringify(observationInsight.obsNodes) : '',
+)
+check(
+  '模型标注的挂载被采用（思路）',
+  Boolean(trickInsight && ideaNode) && (trickInsight.nodes || []).includes(ideaNode.id),
+  trickInsight && ideaNode ? JSON.stringify(trickInsight.nodes) : '',
+)
+check(
+  '模型标注的挂载被采用（知识点）',
+  Boolean(knowledgeInsight && knowledgeNode) && (knowledgeInsight.nodes || []).includes(knowledgeNode.id),
+  knowledgeInsight && knowledgeNode ? JSON.stringify(knowledgeInsight.nodes) : '',
+)
+check('模型给的标签用于挂知识点', Boolean(problem) && (problem.tags || []).includes('dp') && problem.nodes.length > 0)
 
 let duplicate = ''
 try {

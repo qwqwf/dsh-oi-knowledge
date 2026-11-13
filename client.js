@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.45'
+    const CLIENT_BUILD = '1.3.46'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
