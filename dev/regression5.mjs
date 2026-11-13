@@ -33,7 +33,10 @@ setHostTranslate(async (text) => {
 })
 setHostGenerate(async () => [
   '精髓：答案只与相邻两项的差分有关，把差分统一到同一个值即可。',
-  '题解：把相邻差写成差分数组后，目标变成把所有差分调成同一个值 $x$。先枚举 $x$ 的取值，再统计每个位置需要加多少次；正负差分开计数即可，$O(N)$。',
+  '题解：把相邻差写成差分数组后，目标变成把所有差分调成同一个值 $x$。',
+  '先枚举 $x$ 的取值，再统计每个位置需要加多少次。',
+  '',
+  '正负差分开计数即可，$O(N)$。',
   '观察：所有相邻差最终都相等，等价于差分数组只有一种非零值。【挂：观察/转化与化归/差分与前缀】',
   '套路：把区间操作转成差分数组上的单点修改。【挂：思路/数据结构与离线/差分与前缀】',
   '思路：先算出每个位置的差分，再分别统计正负差的数量。【挂：基础与实现/前缀和与差分】',
@@ -57,6 +60,7 @@ const problem = saved.problems.find((item) => item.platform === 'atcoder' && ite
 check('题目按 solved 入库', Boolean(problem) && problem.verdict === 'solved')
 check('题面与题解都保存', Boolean(problem) && problem.statement.length > 100 && problem.solution.length > 20)
 check('题解按理解重写而非照抄', Boolean(problem) && problem.solution !== solution && problem.solution.includes('差分数组'))
+check('题解保留分段/换行', Boolean(problem) && problem.solution.includes('\n') && problem.solution.split('\n').length >= 3)
 check('精髓已写入', Boolean(problem) && problem.essence.includes('差分'))
 check('洞察至少 2 条', Boolean(problem) && problem.insights.length >= 2)
 check('洞察类型齐全', Boolean(problem) && problem.insights.some((i) => i.kind === 'observation') && problem.insights.some((i) => i.kind === 'direction'))

@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.48'
+    const CLIENT_BUILD = '1.3.49'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -3331,7 +3331,7 @@ window.__ModuleLoader__.load({
                     'div',
                     null,
                     h(SectionTitle, { first: true }, '题意'),
-                    h('div', { style: { fontSize: 12.5, lineHeight: 1.75, whiteSpace: 'pre-wrap' } }, h(RichLines, { text: entity.statementZh })),
+                    h('div', { style: { fontSize: 13, lineHeight: 1.8 } }, h(RichLines, { text: entity.statementZh })),
                   )
                 : null,
               entity.solution
@@ -3339,7 +3339,7 @@ window.__ModuleLoader__.load({
                     'div',
                     null,
                     h(SectionTitle, { first: !entity.statementZh }, '题解 / 做法'),
-                    h('div', { style: { fontSize: 12.5, lineHeight: 1.75, whiteSpace: 'pre-wrap' } }, h(MathText, { text: entity.solution })),
+                    h('div', { style: { fontSize: 13, lineHeight: 1.8 } }, h(RichLines, { text: entity.solution })),
                   )
                 : null,
             )
@@ -3397,18 +3397,41 @@ window.__ModuleLoader__.load({
     // 闪卡的题面 / 真值按行排，空行留间距，· 开头做缩进，避免一大段挤在一起。
     function RichLines({ text, style }) {
       const lines = String(text == null ? '' : text).split('\n')
+      const rows = []
+      lines.forEach((line, index) => {
+        const value = line.replace(/\s+$/, '')
+        if (!value.trim()) {
+          rows.push(h('div', { key: `gap-${index}`, style: { height: 9 } }))
+          return
+        }
+        const bullet = /^[-•·]\s+/.exec(value)
+        const numbered = /^(\d+)[.、)]\s+/.exec(value)
+        if (bullet || numbered) {
+          const marker = bullet ? '•' : `${numbered[1]}.`
+          const content = value.slice((bullet || numbered)[0].length)
+          rows.push(
+            h(
+              'div',
+              { key: `line-${index}`, style: { display: 'flex', gap: 8, alignItems: 'flex-start', paddingLeft: 2 } },
+              h(
+                'span',
+                {
+                  key: 'marker',
+                  style: { flex: '0 0 auto', minWidth: 14, textAlign: 'right', color: C.muted, lineHeight: 1.85 },
+                },
+                marker,
+              ),
+              h(MathText, { key: 'content', text: content, style: { flex: '1 1 auto', minWidth: 0 } }),
+            ),
+          )
+          return
+        }
+        rows.push(h('div', { key: `line-${index}`, style: { lineHeight: 1.85 } }, h(MathText, { text: value })))
+      })
       return h(
         'div',
-        { style: Object.assign({ display: 'flex', flexDirection: 'column', gap: 3 }, style || {}) },
-        lines.map((line, index) => {
-          if (!line.trim()) return h('div', { key: `gap-${index}`, style: { height: 5 } })
-          const bullet = /^[·•-]\s*/.test(line)
-          return h(
-            'div',
-            { key: `line-${index}`, style: { paddingLeft: bullet ? 12 : 0, textIndent: bullet ? -9 : 0 } },
-            h(MathText, { text: line }),
-          )
-        }),
+        { style: Object.assign({ display: 'flex', flexDirection: 'column', gap: 4 }, style || {}) },
+        rows,
       )
     }
 
