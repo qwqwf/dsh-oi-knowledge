@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.44'
+    const CLIENT_BUILD = '1.3.45'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -57,6 +57,7 @@ window.__ModuleLoader__.load({
       ['codeforces', 'Codeforces'],
       ['atcoder', 'AtCoder'],
       ['luogu', '洛谷'],
+      ['other', '其他/自定'],
     ]
 
     const C = {
@@ -2765,6 +2766,7 @@ window.__ModuleLoader__.load({
       const [query, setQuery] = React.useState('')
       const [selectedId, setSelectedId] = React.useState(null)
       const [adding, setAdding] = React.useState(false)
+      const [digesting, setDigesting] = React.useState(false)
 
       React.useEffect(() => {
         if (focusProblem && focusProblem.id) {
@@ -2811,9 +2813,11 @@ window.__ModuleLoader__.load({
             onChange: (event) => setQuery(event.target.value),
             style: sx(inputStyle, { flex: 1 }),
           }),
-          h(Btn, { tone: 'primary', onClick: () => setAdding((value) => !value) }, adding ? '收起' : '录题'),
+          h(Btn, { tone: 'primary', onClick: () => { setAdding((value) => !value); setDigesting(false) } }, adding ? '收起' : '录题'),
+          h(Btn, { onClick: () => { setDigesting((value) => !value); setAdding(false) } }, digesting ? '收起' : '补录消化'),
         ),
         adding ? h(AddProblemForm, { onDone: () => setAdding(false) }) : null,
+        digesting ? h(DigestProblemForm, { onDone: () => setDigesting(false) }) : null,
         h(
           'div',
           {
@@ -2985,6 +2989,96 @@ window.__ModuleLoader__.load({
             'div',
             { style: { display: 'flex', gap: 6 } },
             h(Btn, { tone: 'primary', disabled: busy, onClick: submit }, busy ? '保存中…' : '录入'),
+            h(Btn, { onClick: props.onDone }, '取消'),
+          ),
+        ),
+      )
+    }
+
+    function DigestProblemForm(props) {
+      const { call, busy } = useStore()
+      const [platform, setPlatform] = React.useState('other')
+      const [key, setKey] = React.useState('')
+      const [url, setUrl] = React.useState('')
+      const [title, setTitle] = React.useState('')
+      const [rating, setRating] = React.useState('')
+      const [statement, setStatement] = React.useState('')
+      const [solution, setSolution] = React.useState('')
+      const [note, setNote] = React.useState('')
+
+      const submit = async () => {
+        if (!key.trim() && !url.trim()) {
+          setNote('至少填题号或题目链接。')
+          return
+        }
+        if (statement.trim().length < 40) {
+          setNote('题面太短了：至少贴一段能看出任务描述的题面（40 字以上）。')
+          return
+        }
+        setNote('正在读题面与题解、提炼精髓并挂树，通常 30–90 秒，请不要关面板…')
+        const result = await call('digestProblem', {
+          platform,
+          key: key.trim(),
+          url: url.trim(),
+          title: title.trim(),
+          rating: rating === '' ? undefined : Number(rating),
+          statement,
+          solution,
+        })
+        if (result) {
+          props.onDone()
+          return
+        }
+        setNote('没有成功，具体原因看面板顶部的错误提示。')
+      }
+
+      return h(
+        Card,
+        { padding: '10px 12px' },
+        h(SectionTitle, { first: true }, '补录最近做的题并自动消化'),
+        h(
+          'div',
+          { style: { fontSize: 11.5, color: C.muted, marginBottom: 8, lineHeight: 1.5 } },
+          '贴题面和题解，插件会像处理已通过的 AtCoder 题一样：提炼精髓、拆成观察/套路/思路/方向/坑点、自动挂三棵树，并按已通过计入统计。',
+        ),
+        h(
+          'div',
+          { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+          h(
+            'div',
+            { style: { display: 'flex', gap: 6 } },
+            h(Select, { value: platform, onChange: (e) => setPlatform(e.target.value), options: PLATFORMS, style: { width: 118 } }),
+            h('input', {
+              value: key,
+              placeholder: '题号（自己起一个也行，如 recent-1）',
+              onChange: (e) => setKey(e.target.value),
+              style: inputStyle,
+            }),
+          ),
+          h('input', { value: url, placeholder: '题目链接（可省略）', onChange: (e) => setUrl(e.target.value), style: inputStyle }),
+          h(
+            'div',
+            { style: { display: 'flex', gap: 6 } },
+            h('input', { value: title, placeholder: '标题（可省略，默认用题号）', onChange: (e) => setTitle(e.target.value), style: inputStyle }),
+            h('input', { value: rating, placeholder: '难度分', onChange: (e) => setRating(e.target.value), style: sx(inputStyle, { width: 100 }) }),
+          ),
+          h('textarea', {
+            value: statement,
+            placeholder: '题面（必填，可以整段贴英文/中文）',
+            onChange: (e) => setStatement(e.target.value),
+            style: sx(textareaStyle, { minHeight: 110 }),
+          }),
+          h('textarea', {
+            value: solution,
+            placeholder: '题解 / 做法（强烈建议贴，提炼会准很多）',
+            onChange: (e) => setSolution(e.target.value),
+            style: sx(textareaStyle, { minHeight: 110 }),
+          }),
+          note ? h('div', { style: { fontSize: 11.5, color: C.muted, lineHeight: 1.5 } }, note) : null,
+          h(
+            'div',
+            { style: { display: 'flex', gap: 6 } },
+            h(Btn, { tone: 'primary', disabled: busy, onClick: submit }, busy ? '消化中…' : '消化并入库'),
             h(Btn, { onClick: props.onDone }, '取消'),
           ),
         ),

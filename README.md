@@ -94,7 +94,15 @@ oi_problem action=stuck problem="CF 1234E" stage=observe   # 卡点：observe/de
 oi_problem action=classify problem="CF 1234E"    # 按标签/题面重新挂知识点
 oi_problem action=show problem="CF 1234E"
 oi_problem action=list verdict=attempted
+
+oi_problem action=digest platform=other key=recent-1 \
+  title="最近的题" rating=2200 statement="..." solution="..."
+   # 「补录最近做的题」：贴题面（+题解）即自动提炼精髓、拆洞察、挂三棵树，
+   # 按已通过（solved）计入覆盖与弱点统计，和批量消化 AtCoder 已通过题同一条流水线。
+   # 重复题号会被拒绝（补题面用 update，补洞察用 add_insight）。
 ```
+
+面板「题目」页的「补录消化」按钮是同一个流程的表单版，适合不想开对话框的时候用。
 
 `insights` 用 `|` 分隔多行；每条可以用 `kind: 文本` 指定类别，不指定则按关键词猜测。
 

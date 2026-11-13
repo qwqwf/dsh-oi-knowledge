@@ -177,6 +177,7 @@ function registerTools(ctx, service) {
         '数组下标写成下标形式：用 $dp_{i,j}$，不要写 $dp[i][j]$；构造序列（如 1,2,1,2,…）用反引号包成代码。',
         'action 取值：',
         '  add — 录题：platform + key（CF 1879D / AtCoder abc300_f / 洛谷 P1234）或 url；强烈建议同时给 essence（一句话精髓）和 insights；',
+        '  digest — 「最近做的题」补录并消化：platform + key + title + statement（+ solution 更好）；自动提炼精髓与 4–6 条洞察、挂知识点/思路/观察，按 solved 计入统计（和已通过题同一条流水线）；',
         '  add_insight — 给已有题补一条洞察（problem + kind + text + nodes?）；kind 可用英文或中文（观察/套路/思路/思考方向/坑点），nodes 可挂算法节点或思路节点；',
         '  remove_insight — 删一条洞察（problem + insight=id 或文本片段）；',
         '  update — 改题目字段（problem + title/url/rating/tags/verdict/essence/statement/solution/nodes）；',
@@ -197,7 +198,7 @@ function registerTools(ctx, service) {
         properties: {
           action: {
             type: 'string',
-            enum: ['add', 'add_insight', 'remove_insight', 'update', 'stuck', 'show', 'list', 'search', 'link_node', 'unlink_node', 'classify', 'remove'],
+            enum: ['add', 'digest', 'add_insight', 'remove_insight', 'update', 'stuck', 'show', 'list', 'search', 'link_node', 'unlink_node', 'classify', 'remove'],
           },
           problem: { type: 'string', description: '题目：id、platform:key（如 codeforces:1879D）或题目链接' },
           platform: { type: 'string', enum: ['codeforces', 'atcoder', 'luogu', 'other'], description: '平台' },
@@ -248,13 +249,15 @@ function registerTools(ctx, service) {
           limit: { type: 'number', description: 'list 返回条数' },
         },
       },
-      timeoutMs: 60000,
+      timeoutMs: 600000,
       output: SUMMARY_OUTPUT,
       async execute(args) {
         try {
           switch (args.action) {
             case 'add':
               return toolOk(service.addProblem(args))
+            case 'digest':
+              return toolOk(await service.digestProblem(args))
             case 'add_insight':
               return toolOk(
                 service.addInsight({
