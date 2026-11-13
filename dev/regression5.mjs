@@ -85,6 +85,29 @@ check(
 )
 check('模型给的标签用于挂知识点', Boolean(problem) && (problem.tags || []).includes('dp') && problem.nodes.length > 0)
 
+// 直接粘贴中文题面时：不再调翻译，直接裁出「问题描述」当简版题意，且不能把约束/输入格式带进来。
+const zhStatement = [
+  '问题描述',
+  '给定一个长为 $N$ 的整数序列 $A$，你可以任选一个区间翻转一次，求能得到的最小字典序。',
+  '',
+  '约束条件',
+  '$1 \\le N \\le 2 \\times 10^5$',
+  '',
+  '输入格式',
+  '第一行一个整数 $N$，第二行 $N$ 个整数 $A_i$。',
+].join('\n')
+const zhCreated = await service.digestProblem({
+  platform: 'other',
+  key: 'zh-recent-1',
+  title: '区间翻转字典序',
+  statement: zhStatement,
+  solution: '翻转区间只能改变区间内部，从小到大枚举左端点即可。',
+})
+const zhProblem = store.load().problems.find((item) => item.platform === 'other' && item.key === 'zh-recent-1')
+check('中文题面直接生成简版题意', Boolean(zhProblem) && zhProblem.statementZh.length >= 30, zhProblem ? `${zhProblem.statementZh.length} 字` : '')
+check('简版题意不带约束/输入格式', Boolean(zhProblem) && !/约束条件|输入格式|数据范围/.test(zhProblem.statementZh))
+check('中文题面的原文仍然完整保存', Boolean(zhProblem) && zhProblem.statement.includes('约束条件'))
+
 let duplicate = ''
 try {
   await service.digestProblem({ platform: 'atcoder', key: 'abc999_q', title: 'x', statement: englishStatement })

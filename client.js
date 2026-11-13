@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.46'
+    const CLIENT_BUILD = '1.3.47'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -3310,7 +3310,7 @@ window.__ModuleLoader__.load({
                 onChange: (e) => setEssence(e.target.value),
                 style: sx(textareaStyle, { minHeight: 52 }),
               }),
-              h(SectionTitle, null, '英文题面（编辑用）'),
+              h(SectionTitle, null, /[\u4e00-\u9fff]/.test(statement || '') ? '题面（原文）' : '英文题面（编辑用）'),
               h('textarea', { value: statement, onChange: (e) => setStatement(e.target.value), style: sx(textareaStyle, { minHeight: 90 }) }),
               h(SectionTitle, null, '题解 / 做法'),
               h('textarea', { value: solution, onChange: (e) => setSolution(e.target.value), style: sx(textareaStyle, { minHeight: 110 }) }),
