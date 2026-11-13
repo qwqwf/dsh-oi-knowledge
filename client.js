@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     const PANEL_ID = 'oi-knowledge'
-    const CLIENT_BUILD = '1.3.49'
+    const CLIENT_BUILD = '1.3.50'
     const API_PATH = 'plugins/dsh-oi-knowledge/api/'
 
     const KINDS = [
@@ -3095,6 +3095,8 @@ window.__ModuleLoader__.load({
       const [kind, setKind] = React.useState('observation')
       const [text, setText] = React.useState('')
       const [editingBody, setEditingBody] = React.useState(false)
+      const [explaining, setExplaining] = React.useState(false)
+      const [solutionError, setSolutionError] = React.useState('')
       const [essence, setEssence] = React.useState('')
       const [statement, setStatement] = React.useState('')
       const [solution, setSolution] = React.useState('')
@@ -3322,7 +3324,7 @@ window.__ModuleLoader__.load({
               ),
             )
           : null,
-        !editingBody && (entity.statementZh || entity.solution)
+        !editingBody
           ? h(
               Card,
               null,
@@ -3341,7 +3343,38 @@ window.__ModuleLoader__.load({
                     h(SectionTitle, { first: !entity.statementZh }, '题解 / 做法'),
                     h('div', { style: { fontSize: 13, lineHeight: 1.8 } }, h(RichLines, { text: entity.solution })),
                   )
-                : null,
+                : h(
+                    'div',
+                    null,
+                    h(SectionTitle, { first: !entity.statementZh }, '题解 / 做法'),
+                    h(
+                      'div',
+                      { style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
+                      h(
+                        Btn,
+                        {
+                          disabled: explaining,
+                          onClick: async () => {
+                            setExplaining(true)
+                            setSolutionError('')
+                            try {
+                              await call('explainProblem', { problem: entity.id }, { throwOnError: true })
+                              setTick((value) => value + 1)
+                            } catch (error) {
+                              setSolutionError(error && error.message ? error.message : '题解没写出来，稍后再试')
+                            } finally {
+                              setExplaining(false)
+                            }
+                          },
+                        },
+                        explaining ? '正在写题解（约 10–30 秒）…' : '补写题解',
+                      ),
+                      h('span', { style: { fontSize: 12, color: C.muted } }, '用题面、精髓和已有洞察生成 2–5 段中文做法'),
+                    ),
+                    solutionError
+                      ? h('div', { style: { fontSize: 12, color: C.danger, marginTop: 6 } }, solutionError)
+                      : null,
+                  ),
             )
           : null,
         h(

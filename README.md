@@ -105,6 +105,10 @@ oi_problem action=digest platform=other key=recent-1 \
 
 面板「题目」页的「补录消化」按钮是同一个流程的表单版，适合不想开对话框的时候用。
 
+oi_problem action=explain problem="atcoder:abc226_h"
+   # 给还没有题解的题补写中文做法（用题面、精髓和已有洞察；有英文题解会作参考）。
+   # 已有题解时传 force=true 才重写。面板里是题目详情「题解 / 做法」卡上的「补写题解」按钮。
+
 `insights` 用 `|` 分隔多行；每条可以用 `kind: 文本` 指定类别，不指定则按关键词猜测。
 
 ### `oi_account` —— 账号与同步

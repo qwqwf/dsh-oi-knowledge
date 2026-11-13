@@ -178,6 +178,7 @@ function registerTools(ctx, service) {
         'action 取值：',
         '  add — 录题：platform + key（CF 1879D / AtCoder abc300_f / 洛谷 P1234）或 url；强烈建议同时给 essence（一句话精髓）和 insights；',
         '  digest — 「最近做的题」补录并消化：platform + key + title + statement（+ solution 更好）；自动提炼精髓与 4–6 条洞察、挂知识点/思路/观察，按 solved 计入统计（和已通过题同一条流水线）；',
+        '  explain — 给空着题解的题补写中文做法（problem；已有题解传 force=true 才重写）；用题面/精髓/洞察（有英文题解也作参考）生成 2–5 段；',
         '  add_insight — 给已有题补一条洞察（problem + kind + text + nodes?）；kind 可用英文或中文（观察/套路/思路/思考方向/坑点），nodes 可挂算法节点或思路节点；',
         '  remove_insight — 删一条洞察（problem + insight=id 或文本片段）；',
         '  update — 改题目字段（problem + title/url/rating/tags/verdict/essence/statement/solution/nodes）；',
@@ -198,7 +199,7 @@ function registerTools(ctx, service) {
         properties: {
           action: {
             type: 'string',
-            enum: ['add', 'digest', 'add_insight', 'remove_insight', 'update', 'stuck', 'show', 'list', 'search', 'link_node', 'unlink_node', 'classify', 'remove'],
+            enum: ['add', 'digest', 'explain', 'add_insight', 'remove_insight', 'update', 'stuck', 'show', 'list', 'search', 'link_node', 'unlink_node', 'classify', 'remove'],
           },
           problem: { type: 'string', description: '题目：id、platform:key（如 codeforces:1879D）或题目链接' },
           platform: { type: 'string', enum: ['codeforces', 'atcoder', 'luogu', 'other'], description: '平台' },
@@ -246,6 +247,7 @@ function registerTools(ctx, service) {
           verdict_filter: { type: 'string', enum: ['solved', 'attempted', 'unsolved', 'unknown'], description: 'list 的状态过滤' },
           stage: { type: 'string', enum: ['observe', 'derive', 'implement', 'debug', ''], description: 'stuck：卡点阶段，留空表示清除' },
           apply: { type: 'boolean', description: 'classify 是否写回，默认 true' },
+          force: { type: 'boolean', description: 'explain：已有题解时也强行重写' },
           limit: { type: 'number', description: 'list 返回条数' },
         },
       },
@@ -258,6 +260,8 @@ function registerTools(ctx, service) {
               return toolOk(service.addProblem(args))
             case 'digest':
               return toolOk(await service.digestProblem(args))
+            case 'explain':
+              return toolOk(await service.explainProblem({ problem: args.problem || (args.platform && args.key ? `${args.platform}:${args.key}` : ''), force: args.force }))
             case 'add_insight':
               return toolOk(
                 service.addInsight({
